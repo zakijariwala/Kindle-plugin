@@ -1,10 +1,10 @@
 --[[--
 Thin adapter over KOReader's own document/library facilities.
 
-Nothing here parses documents or keeps an index: metadata comes from
-KOReader's sidecar files (via FileManagerBookInfo / BookList), covers from the
-Cover browser plugin's cache (only if that plugin is enabled), and books are
-opened through FileManager:openFile / ReaderUI:showReader.
+Nothing here parses documents: metadata comes from KOReader's sidecar files
+(via FileManagerBookInfo / BookList) and books are opened through
+FileManager:openFile / ReaderUI:showReader. Caching of that metadata and of
+cover thumbnails lives in util/librarycache.lua.
 
 @module kindleui.util.books
 ]]
@@ -85,7 +85,7 @@ function Books.scan(root, max_depth, max_books)
                 elseif attr and attr.mode == "file" then
                     local ext = util.getFileNameSuffix(f)
                     if ext and exts[ext:lower()] then
-                        table.insert(found, { path = path, name = f, mtime = attr.modification })
+                        table.insert(found, { path = path, name = f, mtime = attr.modification, size = attr.size })
                     end
                 end
             end
@@ -120,20 +120,6 @@ function Books.getInfo(ui, file)
         info.status = book_info.status
     end
     return info
-end
-
---- Cover blitbuffer from the Cover browser cache, if that plugin is enabled
--- and has already extracted this book. Never extracts anything itself.
--- The caller owns (and must free) the returned blitbuffer.
-function Books.getCachedCover(ui, file)
-    if not (ui and ui.coverbrowser) then return nil end
-    local ok, BookInfoManager = pcall(require, "bookinfomanager")
-    if not ok or not BookInfoManager then return nil end
-    local ok_info, bookinfo = pcall(BookInfoManager.getBookInfo, BookInfoManager, file, true)
-    if ok_info and bookinfo and bookinfo.cover_bb then
-        return bookinfo.cover_bb
-    end
-    return nil
 end
 
 --- Most recently read book that still exists, or nil.

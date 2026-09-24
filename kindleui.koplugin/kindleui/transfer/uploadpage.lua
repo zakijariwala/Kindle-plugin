@@ -41,6 +41,7 @@ button:disabled{background:#bbb}
 .bar{height:14px;border:2px solid #111;border-radius:7px;overflow:hidden;margin:18px 0 6px;display:none}
 .bar div{height:100%;width:0;background:#111}
 #status{text-align:center;min-height:1.4em;margin-top:10px}
+#list{list-style:none;padding:0;margin:14px 0 0;font-size:15px}#list li{padding:4px 0;word-break:break-word}.bad{color:#a00}
 .ok{font-size:19px;font-weight:700}
 .note{color:#555;font-size:14px;margin-top:32px}
 </style>
@@ -49,37 +50,58 @@ button:disabled{background:#bbb}
 <h1>SEND TO KINDLE</h1>
 <noscript><p>JavaScript is required to upload from this page.</p></noscript>
 <div id="form">
-<label class="pick" for="file">Choose File</label>
-<input id="file" type="file">
+<label class="pick" for="file">Choose Books</label>
+<input id="file" type="file" multiple>
 <div id="name"></div>
 <button id="send" disabled>Upload</button>
 </div>
 <div class="bar" id="bar"><div id="fill"></div></div>
 <div id="status" role="status" aria-live="polite"></div>
-<p class="note">Supported: {{FORMATS}}.<br>Maximum size: {{MAX_MB}} MB.<br>The file goes directly from this phone to the Kindle over your local Wi-Fi. No internet connection is used.</p>
+<ul id="list"></ul>
+<p class="note">Supported: {{FORMATS}}.<br>Maximum size per book: {{MAX_MB}} MB.<br>You can select several books at once. They go directly from this phone to the Kindle over your local Wi-Fi. No internet connection is used.</p>
 <script>
 (function(){
-var URL_PATH="{{UPLOAD_PATH}}";
+var BASE="{{BASE_PATH}}";
 var f=document.getElementById("file"),b=document.getElementById("send"),n=document.getElementById("name"),
     s=document.getElementById("status"),bar=document.getElementById("bar"),fill=document.getElementById("fill"),
-    form=document.getElementById("form");
+    form=document.getElementById("form"),list=document.getElementById("list");
 function say(t,cls){s.textContent=t;s.className=cls||"";}
-f.onchange=function(){var x=f.files&&f.files[0];n.textContent=x?x.name:"";b.disabled=!x;say("");};
+function item(t,cls){var li=document.createElement("li");li.textContent=t;li.className=cls||"";list.appendChild(li);}
+f.onchange=function(){var k=f.files?f.files.length:0;
+  n.textContent=k===1?f.files[0].name:(k>1?k+" books selected":"");b.disabled=!k;say("");};
+function finish(ok,bad,dead){
+  bar.style.display="none";
+  if(dead){return;}
+  var r=new XMLHttpRequest();r.open("POST",BASE+"/finish",true);r.send("");
+  form.style.display="none";
+  if(ok&&!bad){say("\u2713 "+(ok===1?"Book sent successfully.":ok+" books sent successfully.")+" You may close this page.","ok");}
+  else if(ok){say("\u2713 "+ok+" sent, "+bad+" not sent (see below). You may close this page.","ok");}
+  else{say("No books were sent.");}
+}
 b.onclick=function(){
-  var x=f.files&&f.files[0]; if(!x){return;}
-  b.disabled=true; f.disabled=true; bar.style.display="block"; fill.style.width="0"; say("Uploading... 0%");
-  var r=new XMLHttpRequest();
-  r.open("POST",URL_PATH+"?name="+encodeURIComponent(x.name),true);
-  r.setRequestHeader("Content-Type","application/octet-stream");
-  r.upload.onprogress=function(e){if(e.lengthComputable){var p=Math.floor(e.loaded*100/e.total);fill.style.width=p+"%";say("Uploading... "+p+"%");}};
-  r.onload=function(){
-    if(r.status===200){fill.style.width="100%";form.style.display="none";bar.style.display="none";
-      say("✓ Book sent successfully. You may close this page.","ok");}
-    else{bar.style.display="none";say(r.responseText||("Upload failed ("+r.status+")."));
-      if(r.status!==404&&r.status!==410){b.disabled=false;f.disabled=false;}}
-  };
-  r.onerror=function(){bar.style.display="none";say("Connection to the Kindle was lost. Make sure the Send Book screen is still open, then try again.");b.disabled=false;f.disabled=false;};
-  r.send(x);
+  var files=[],i;for(i=0;i<f.files.length;i++){files.push(f.files[i]);}
+  if(!files.length){return;}
+  b.disabled=true;f.disabled=true;list.textContent="";bar.style.display="block";
+  var ok=0,bad=0,idx=0;
+  function next(){
+    if(idx>=files.length){finish(ok,bad,false);return;}
+    var x=files[idx],pos=idx+1,label=(files.length>1?"Book "+pos+" of "+files.length+": ":"")+x.name;idx++;
+    fill.style.width="0";say("Uploading "+label+"... 0%");
+    var r=new XMLHttpRequest();
+    r.open("POST",BASE+"/upload?name="+encodeURIComponent(x.name)+"&index="+pos+"&count="+files.length,true);
+    r.setRequestHeader("Content-Type","application/octet-stream");
+    r.upload.onprogress=function(e){if(e.lengthComputable){var p=Math.floor(e.loaded*100/e.total);fill.style.width=p+"%";say("Uploading "+label+"... "+p+"%");}};
+    r.onload=function(){
+      if(r.status===200){ok++;item("\u2713 "+x.name,"good");next();}
+      else if(r.status===404||r.status===410){bar.style.display="none";say(r.responseText);finish(ok,bad,true);}
+      else{bad++;item("\u2717 "+x.name+" \u2014 "+(r.responseText||("error "+r.status)),"bad");next();}
+    };
+    r.onerror=function(){bar.style.display="none";
+      say("Connection to the Kindle was lost. Make sure the Send Book screen is still open, then try again.");
+      b.disabled=false;f.disabled=false;};
+    r.send(x);
+  }
+  next();
 };
 })();
 </script>
@@ -88,13 +110,13 @@ b.onclick=function(){
 ]]
 
 --- Renders the page.
--- @param o { upload_path = "/<token>/upload", formats = "EPUB, PDF, ...", max_mb = 500 }
+-- @param o { base_path = "/<token>", formats = "EPUB, PDF, ...", max_mb = 500 }
 function UploadPage.render(o)
-    local path = tostring(o.upload_path)
+    local path = tostring(o.base_path)
     -- The path is ours (hex token) but never let it break out of the JS string.
-    assert(path:match("^[/%w]+$"), "unexpected upload path")
+    assert(path:match("^/%w+$"), "unexpected base path")
     local page = TEMPLATE
-        :gsub("{{UPLOAD_PATH}}", function() return path end)
+        :gsub("{{BASE_PATH}}", function() return path end)
         :gsub("{{FORMATS}}", function() return htmlEscape(o.formats or "EPUB, PDF") end)
         :gsub("{{MAX_MB}}", function() return htmlEscape(o.max_mb or 500) end)
     return page

@@ -5,7 +5,7 @@ Simplified Settings.
       Reading       – a few common reading options (KOReader's own items)
       Library       – sort order, Home screen at startup, refresh
       Device        – frontlight, sleep screen, rotation (KOReader's own items)
-      Connectivity  – Wi-Fi (KOReader's own), transfer method
+      Connectivity  – Send Book, Wi-Fi (KOReader's own)
       Advanced      – Open KOReader Settings / all menus, plugin management
       About
 
@@ -21,7 +21,6 @@ local Config = require("kindleui/config")
 local Device = require("device")
 local InfoMessage = require("ui/widget/infomessage")
 local Library = require("kindleui/ui/library")
-local Providers = require("kindleui/transfer/provider")
 local UIManager = require("ui/uimanager")
 local _ = require("gettext")
 local T = require("ffi/util").template
@@ -61,7 +60,20 @@ function Settings.build(plugin)
             callback = function() Config.set("library_sort", s.id) end,
         })
     end
+    local view_items = {}
+    for __, v in ipairs(Library.VIEWS) do
+        table.insert(view_items, {
+            text = v.text,
+            radio = true,
+            checked_func = function() return Config.get("library_view") == v.id end,
+            callback = function() Config.set("library_view", v.id) end,
+        })
+    end
     local library = {
+        {
+            text = _("View"),
+            sub_item_table = view_items,
+        },
         {
             text = _("Sort books by"),
             sub_item_table = sort_items,
@@ -81,8 +93,6 @@ function Settings.build(plugin)
             end,
         },
     }
-    -- Cover browser's display mode (list / mosaic), if that plugin is enabled.
-    addIf(library, ko("filemanager_display_mode"))
 
     -- Device ------------------------------------------------------------------
     local device = {}
@@ -91,16 +101,6 @@ function Settings.build(plugin)
     addIf(device, ko("screen_rotation"))
 
     -- Connectivity ----------------------------------------------------------
-    local method_items = {}
-    for __, p in ipairs(Providers.list()) do
-        table.insert(method_items, {
-            text = p.name,
-            radio = true,
-            enabled_func = function() return p.available end,
-            checked_func = function() return Config.get("transfer_method") == p.id end,
-            callback = function() Config.set("transfer_method", p.id) end,
-        })
-    end
     local connectivity = {
         {
             text = _("Send Book"),
@@ -108,10 +108,6 @@ function Settings.build(plugin)
                 if touchmenu_instance then touchmenu_instance:closeMenu() end
                 plugin:showTransfer()
             end,
-        },
-        {
-            text = _("Transfer method"),
-            sub_item_table = method_items,
         },
     }
     addIf(connectivity, ko("network"))

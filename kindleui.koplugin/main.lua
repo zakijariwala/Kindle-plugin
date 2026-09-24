@@ -34,6 +34,7 @@ local shell = {
     pending_home = false,  -- show Home when the file browser comes up next
     suppress_home = false, -- user explicitly asked for the file browser
     home_dirty = false,    -- library changed while Home was covered
+    cleaned = false,       -- stale upload temp files removed (once per run)
 }
 
 local KindleUI = WidgetContainer:extend{
@@ -59,6 +60,26 @@ end
 function KindleUI:init()
     self:onDispatcherRegisterActions()
     self.ui.menu:registerToMainMenu(self)
+
+    if not shell.cleaned then
+        -- A crash or power loss mid-upload leaves a hidden .part file behind;
+        -- no transfer can be running this early, so they are all stale.
+        shell.cleaned = true
+        UIManager:nextTick(function()
+            local FS = require("kindleui/util/filesystem")
+            local removed = 0
+            local seen = {}
+            for __, dir in ipairs({ Books.destinationDir(), Books.homeDir() }) do
+                if not seen[dir] then
+                    seen[dir] = true
+                    removed = removed + FS.removeStaleUploads(dir)
+                end
+            end
+            if removed > 0 then
+                logger.info("KindleUI: removed", removed, "stale upload temp file(s)")
+            end
+        end)
+    end
 
     if self:isFileManager() then
         local want = shell.pending_home or Config.get("show_on_start")
@@ -148,8 +169,7 @@ function KindleUI:closeHome()
 end
 
 function KindleUI:showLibrary()
-    local Library = require("kindleui/ui/library")
-    UIManager:show(Library:new{ plugin = self })
+    require("kindleui/ui/library").show(self)
 end
 
 function KindleUI:showPlugins()

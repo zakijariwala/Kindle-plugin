@@ -51,6 +51,7 @@ end
 -- Also focusable for devices with keys only (FocusManager sends Tap events).
 Common.Tappable = InputContainer:extend{
     callback = nil,
+    hold_callback = nil,
 }
 
 function Common.Tappable:init()
@@ -60,10 +61,23 @@ function Common.Tappable:init()
             range = function() return self.dimen end,
         },
     }
+    if self.hold_callback then
+        self.ges_events.Hold = {
+            GestureRange:new{
+                ges = "hold",
+                range = function() return self.dimen end,
+            },
+        }
+    end
 end
 
 function Common.Tappable:onTap()
     if self.callback then self.callback() end
+    return true
+end
+
+function Common.Tappable:onHold()
+    if self.hold_callback then self.hold_callback() end
     return true
 end
 

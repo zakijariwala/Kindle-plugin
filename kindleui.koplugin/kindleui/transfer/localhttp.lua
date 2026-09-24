@@ -11,6 +11,7 @@ local Device = require("device")
 local Network = require("kindleui/util/network")
 local QR = require("kindleui/transfer/qr")
 local Session = require("kindleui/transfer/session")
+local SleepGuard = require("kindleui/util/sleepguard")
 local UIManager = require("ui/uimanager")
 local logger = require("logger")
 
@@ -50,15 +51,12 @@ function LocalHttp:start(info, callbacks)
     if not ok then
         return nil, err
     end
-    -- Keep the device out of standby while the phone may be sending data.
-    UIManager:preventStandby()
+    -- Keep the device awake while the phone may be sending data.
+    SleepGuard.hold()
     local orig_stop = session.stop
     session.stop = function(s, reason)
-        local was_stopped = s.state == "stopped"
         orig_stop(s, reason)
-        if not was_stopped then
-            UIManager:allowStandby()
-        end
+        SleepGuard.release() -- idempotent
     end
     session.ip = info.ip
     session.url = QR.buildUrl(info.ip, session.port, session:getPath())

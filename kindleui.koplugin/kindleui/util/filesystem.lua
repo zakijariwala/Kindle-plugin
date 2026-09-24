@@ -39,6 +39,16 @@ function FS.isDir(path)
     return FS.mode(path) == "directory"
 end
 
+--- True if files can be created in `dir` (probes with a hidden temp file).
+function FS.isWritableDir(dir)
+    local probe = dir .. "/.kindleui-probe"
+    local f = io.open(probe, "wb")
+    if not f then return false end
+    f:close()
+    os.remove(probe)
+    return true
+end
+
 --- Returns the size of a regular file, or nil.
 function FS.size(path)
     if lfs then
@@ -67,6 +77,29 @@ function FS.freeSpace(path)
         if ok_df and available then return tonumber(available) end
     end
     return nil
+end
+
+-- Exact name pattern of our upload temp files (see transfer/upload.lua).
+FS.TEMP_PATTERN = "^%.kindleui%-upload%-%x+%.part$"
+
+--- Deletes upload temp files left behind by a crash or power loss mid-upload.
+-- Only files matching FS.TEMP_PATTERN directly inside `dir` are touched.
+-- Must only be called while no transfer session is running.
+-- @treturn int number of files removed
+function FS.removeStaleUploads(dir)
+    if not lfs or not dir then return 0 end
+    local ok, iter, dir_obj = pcall(lfs.dir, dir)
+    if not ok then return 0 end
+    local removed = 0
+    for name in iter, dir_obj do
+        if name:match(FS.TEMP_PATTERN) then
+            local path = dir .. "/" .. name
+            if lfs.attributes(path, "mode") == "file" and os.remove(path) then
+                removed = removed + 1
+            end
+        end
+    end
+    return removed
 end
 
 --- Joins a directory and a *single* sanitized component.

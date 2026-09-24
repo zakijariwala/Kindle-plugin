@@ -81,6 +81,23 @@ T.eq(FS.uniquePath(dir, "x.epub"), dir .. "/x (3).epub", "second collision")
 T.ok(FS.isDir(dir), "isDir")
 T.ok(not FS.isDir(dir .. "/x.epub"), "file is not dir")
 
+T.section("stale temp file cleanup")
+do
+    local d = T.tmpdir()
+    for _, n in ipairs({ ".kindleui-upload-0a1b2c3d4e5f.part", ".kindleui-upload-ffff.part",
+                         "book.epub", ".kindleui-upload-.part", "kindleui-upload-00.part",
+                         ".kindleui-upload-00.part.epub", ".other.part" }) do
+        io.open(d .. "/" .. n, "wb"):close()
+    end
+    os.execute('mkdir "' .. d .. '/.kindleui-upload-abcd.part"')
+    T.eq(FS.removeStaleUploads(d), 2, "removes exactly the two stale temp files")
+    local left = T.listDir(d)
+    table.sort(left)
+    T.eq(table.concat(left, ","), ".kindleui-upload-.part,.kindleui-upload-00.part.epub,.kindleui-upload-abcd.part,.other.part,book.epub,kindleui-upload-00.part",
+        "everything else untouched (including a directory with the pattern)")
+    T.eq(FS.removeStaleUploads(d .. "/missing"), 0, "missing directory is harmless")
+end
+
 T.section("format sniffing")
 local function write(name, data) local f = io.open(dir .. "/" .. name, "wb") f:write(data) f:close() return dir .. "/" .. name end
 T.ok(FS.looksLike(write("a.epub", "PK\3\4rest"), "epub"), "epub zip magic")

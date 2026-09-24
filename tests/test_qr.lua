@@ -22,12 +22,13 @@ else
 end
 
 T.section("upload page")
-local page = UploadPage.render{ upload_path = "/" .. token .. "/upload", formats = "EPUB, PDF <b>", max_mb = 500 }
-T.ok(page:find('"/' .. token .. '/upload"', 1, true), "upload path embedded")
+local page = UploadPage.render{ base_path = "/" .. token, formats = "EPUB, PDF <b>", max_mb = 500 }
+T.ok(page:find('"/' .. token .. '"', 1, true), "tokenized base path embedded")
+T.ok(page:find('type="file" multiple', 1, true), "several books can be selected")
 T.ok(page:find("EPUB, PDF &lt;b&gt;", 1, true), "format list HTML-escaped")
 T.ok(not page:find("<script src", 1, true), "no external scripts")
 T.ok(not page:find("<link", 1, true), "no external stylesheets")
-T.ok(not pcall(UploadPage.render, { upload_path = '/x";alert(1)//' }), "refuses unexpected upload path")
+T.ok(not pcall(UploadPage.render, { base_path = '/x";alert(1)//' }), "refuses unexpected base path")
 T.ok(UploadPage.CSP:find("default-src 'none'", 1, true), "CSP denies everything by default")
 
 T.done()

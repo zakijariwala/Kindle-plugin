@@ -6,8 +6,10 @@ transport (e.g. a future Cloudflare R2 relay) can be added beside the local
 one without touching the local implementation:
 
     Transfer Provider
-          ├── local_http   (this MVP: phone → Kindle over the hotspot/LAN)
-          └── cloud        (placeholder, not implemented, never selectable)
+          └── local_http   (this MVP: phone → Kindle over the hotspot/LAN)
+
+A future provider (e.g. cloud) is added to `list` below; nothing in the UI
+shows or mentions it until it exists.
 
 Provider interface:
     id, name, available
@@ -27,11 +29,6 @@ local list = {
         name = _("Local Wi-Fi"),
         available = true,
         module = "kindleui/transfer/localhttp",
-    },
-    {
-        id = "cloud",
-        name = _("Cloud (not available yet)"),
-        available = false,
     },
 }
 

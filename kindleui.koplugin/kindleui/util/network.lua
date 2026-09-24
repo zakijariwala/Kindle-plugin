@@ -189,14 +189,28 @@ end
 -- same way; we mirror that and always remove the rule again.
 function Network.firewallFor(Device)
     if not (Device and Device.isKindle and Device:isKindle()) then return nil end
+    local function run(cmd)
+        local rc = os.execute(cmd)
+        return rc == 0 or rc == true
+    end
     local function rules(action, port)
         port = math.floor(tonumber(port))
-        os.execute(string.format("iptables -%s INPUT -p tcp --dport %d -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT", action, port))
-        os.execute(string.format("iptables -%s OUTPUT -p tcp --sport %d -m conntrack --ctstate ESTABLISHED -j ACCEPT", action, port))
+        local ok_in = run(string.format(
+            "iptables -%s INPUT -p tcp --dport %d -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT", action, port))
+        local ok_out = run(string.format(
+            "iptables -%s OUTPUT -p tcp --sport %d -m conntrack --ctstate ESTABLISHED -j ACCEPT", action, port))
+        if ok_in and ok_out then
+            log("info", action == "A" and "firewall opened for port" or "firewall closed for port", port)
+        else
+            -- Most likely cause of "the phone times out": say so in the log.
+            log("err", "iptables", action == "A" and "open" or "close", "failed for port", port,
+                "(INPUT ok:", ok_in, "OUTPUT ok:", ok_out, ")")
+        end
+        return ok_in and ok_out
     end
     return {
-        open = function(port) rules("A", port) end,
-        close = function(port) rules("D", port) end,
+        open = function(port) return rules("A", port) end,
+        close = function(port) return rules("D", port) end,
     }
 end
 

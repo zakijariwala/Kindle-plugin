@@ -11,6 +11,10 @@ while it is displayed. Closing it (Back key) simply reveals the file browser.
 
 local Blitbuffer = require("ffi/blitbuffer")
 local Books = require("kindleui/util/books")
+local Cache = require("kindleui/util/librarycache")
+local Extractor = require("kindleui/util/extractor")
+local Perf = require("kindleui/util/perf")
+local filemanagerutil = require("apps/filemanager/filemanagerutil")
 local Button = require("ui/widget/button")
 local Common = require("kindleui/ui/common")
 local Device = require("device")
@@ -37,6 +41,7 @@ local Home = FocusManager:extend{
 }
 
 function Home:init()
+    self.t_open = Perf.start()
     self.dimen = Geom:new{ x = 0, y = 0, w = Screen:getWidth(), h = Screen:getHeight() }
     if Device:hasKeys() then
         -- Back leaves the shell and reveals KOReader's file browser (never a dead end).
@@ -76,7 +81,12 @@ function Home:_continueReading(inner_w)
         }, open_btn
     end
 
-    local info = Books.getInfo(self.plugin.ui, file)
+    local entry = Cache.getEntry(self.plugin.ui, file)
+    local info = {
+        title = entry and entry.title or filemanagerutil.splitFileNameType(file),
+        authors = entry and entry.authors,
+        percent = entry and entry.percent,
+    }
     local pad = Size.padding.large
     local border = Size.border.thick
     local content_w = inner_w - 2 * (pad + border)
@@ -84,7 +94,12 @@ function Home:_continueReading(inner_w)
     local cover_w = math.floor(cover_h * 2 / 3)
     local row = HorizontalGroup:new{ align = "top" }
 
-    local cover_bb = Books.getCachedCover(self.plugin.ui, file)
+    local cover_bb = Cache.loadCover(entry)
+    if entry and Cache.needsExtraction(entry) then
+        -- First time this book is shown: extract its cover right after Home
+        -- has been painted, then rebuild the card.
+        self.pending_extract = { file = file, entry = entry, w = cover_w, h = cover_h }
+    end
     local text_w = content_w
     if cover_bb then
         self.cover_widget = ImageWidget:new{
@@ -150,6 +165,8 @@ end
 
 function Home:build()
     self:_freeCover()
+    self.pending_extract = nil
+    self.extract_started = nil
     local w = self.dimen.w
     local margin = Common.SIDE_MARGIN
     local inner_w = w - 2 * margin
@@ -221,6 +238,30 @@ function Home:onShow()
     return true
 end
 
+function Home:paintTo(bb, x, y)
+    FocusManager.paintTo(self, bb, x, y)
+    if self.t_open then
+        Perf.log("home open (to first paint)", self.t_open)
+        self.t_open = nil
+    end
+    if self.pending_extract and not self.extract_started then
+        -- Start after this paint (never fork from inside a repaint).
+        self.extract_started = true
+        local job = self.pending_extract
+        UIManager:nextTick(function()
+            if not UIManager:isWidgetShown(self) then return end
+            local t0 = Perf.start()
+            self.extract_job = Extractor.start({ { path = job.file, entry = job.entry, w = job.w, h = job.h } }, {
+                onDone = function()
+                    self.extract_job = nil
+                    Perf.log("home cover extracted (child process)", t0, { has_cover = job.entry.cover ~= nil })
+                    if UIManager:isWidgetShown(self) then self:refresh() end
+                end,
+            })
+        end)
+    end
+end
+
 function Home:onClose()
     UIManager:close(self)
     return true
@@ -235,6 +276,10 @@ function Home:onHome()
 end
 
 function Home:onCloseWidget()
+    if self.extract_job then
+        self.extract_job:cancel()
+        self.extract_job = nil
+    end
     self:_freeCover()
     if self.plugin then self.plugin:onHomeClosed(self) end
 end

@@ -4,8 +4,11 @@
 Discovery is KOReader's own: `PluginLoader:loadPlugins()` returns the same
 enabled/disabled lists the core uses (no hard-coded list, no second scan).
 
-"Open" re-uses each plugin's *existing* menu: we call the plugin instance's
-own `addToMainMenu(menu_items)` on a scratch table — exactly what KOReader's
+Opening the screen runs no plugin code: the list comes from the module
+tables KOReader already loaded, and whether a plugin "has a menu" is just a
+check that its instance defines `addToMainMenu`. Only when a plugin is
+tapped do we call that instance's own `addToMainMenu(menu_items)` on a
+scratch table — exactly what KOReader's
 FileManagerMenu/ReaderMenu do when they build the main menu (and what its
 debug guard does with a mock table) — and show the resulting entries in
 KOReader's native TouchMenu. Nothing is patched, wrapped, disabled or
@@ -18,6 +21,7 @@ local Common = require("kindleui/ui/common")
 local Device = require("device")
 local InfoMessage = require("ui/widget/infomessage")
 local Menu = require("ui/widget/menu")
+local Perf = require("kindleui/util/perf")
 local PluginLoader = require("pluginloader")
 local UIManager = require("ui/uimanager")
 local logger = require("logger")
@@ -30,6 +34,7 @@ local Plugins = Menu:extend{
     covers_fullscreen = true,
     is_borderless = true,
     is_popout = false,
+    is_enable_shortcut = false,
     title_bar_fm_style = true,
     items_per_page = 10,
     plugin = nil, -- our own plugin instance
@@ -69,6 +74,7 @@ function Plugins.collectMenuItems(instance)
 end
 
 function Plugins:init()
+    self.t_open = Perf.start()
     self.title = _("Installed Plugins")
     self.width = Screen:getWidth()
     self.height = Screen:getHeight()
@@ -83,9 +89,9 @@ function Plugins:buildItems()
         if module.name ~= "kindleui" then
             local instance = PluginLoader:getPluginInstance(module.name)
                 or (self.plugin.ui and self.plugin.ui[module.name])
-            local menu_items = instance and Plugins.collectMenuItems(instance) or {}
+            local has_menu = type(instance) == "table" and type(instance.addToMainMenu) == "function"
             local state
-            if #menu_items > 0 then
+            if has_menu then
                 state = _("Open")
             elseif not instance then
                 -- is_doc_only plugins only exist while a book is open
@@ -98,7 +104,6 @@ function Plugins:buildItems()
                 mandatory = state,
                 plugin_module = module,
                 plugin_instance = instance,
-                menu_items = menu_items,
             })
         end
     end
@@ -133,7 +138,9 @@ function Plugins:onMenuChoice(item)
         })
         return true
     end
-    if #item.menu_items == 0 then
+    -- Built only now, for this one plugin.
+    local menu_items = item.plugin_instance and Plugins.collectMenuItems(item.plugin_instance) or {}
+    if #menu_items == 0 then
         local msg
         if not item.plugin_instance then
             msg = T(_("%1 is only available while a book is open.\n\nOpen a book, then use the KOReader menu (tap the top of the screen)."), item.text)
@@ -144,7 +151,7 @@ function Plugins:onMenuChoice(item)
         return true
     end
     -- A plugin with a single entry that is a sub-menu: open that sub-menu directly.
-    local items = item.menu_items
+    local items = menu_items
     if #items == 1 then
         local only = items[1]
         local sub = only.sub_item_table_func and only.sub_item_table_func() or only.sub_item_table
@@ -154,6 +161,14 @@ function Plugins:onMenuChoice(item)
     end
     Common.showTouchMenu(items, "appbar.tools")
     return true
+end
+
+function Plugins:paintTo(bb, x, y)
+    Menu.paintTo(self, bb, x, y)
+    if self.t_open then
+        Perf.log("plugins open (to first paint)", self.t_open, { plugins = #self.item_table - 1 })
+        self.t_open = nil
+    end
 end
 
 function Plugins:onCloseWidget()

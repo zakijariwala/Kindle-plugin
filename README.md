@@ -6,8 +6,9 @@ shell on top of KOReader:
 ```
 Home
  ├── Continue Reading   (cover · title · author · progress → opens the book)
- ├── My Library         (simple list: title, author, progress, sort, refresh)
- ├── + Send Book        (phone → Kindle over the phone's hotspot, via QR code)
+ ├── My Library         (cover grid like a Kindle, or a list; sort, refresh)
+ ├── + Send Book        (phone → Kindle over the phone's hotspot, via QR code;
+ │                       several books at once)
  ├── Installed Plugins  (every KOReader plugin, with its own menu)
  └── Settings           (Reading · Library · Device · Connectivity · Advanced · About)
 ```
@@ -23,11 +24,12 @@ the Kindle joins it, the Kindle shows a QR code, the phone's browser opens it
 and uploads the file straight to the Kindle over the local link. No cloud, no
 account and no phone app are involved.
 
-> **Status: MVP, not yet tested on Kindle hardware.** The transfer layer is
-> covered by automated tests (real sockets and HTTP uploads, see
-> [docs/TESTING.md](docs/TESTING.md)). The UI was written against the
-> KOReader source and checked statically, but it has not been run inside
-> KOReader or on a device yet. See [Compatibility](#compatibility).
+> **Status: MVP, tested in a KOReader emulator, not yet on Kindle hardware.**
+> Every screen and the complete phone → Kindle transfer were run inside a real
+> KOReader build (v2026.07.1, Linux, at Paperwhite 12 resolution), with
+> headless Chromium playing the phone. The Kindle-only parts (firewall rule,
+> Kindle sleep timer) and real device speed still need a device. See
+> [Compatibility](#compatibility) and [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 
 ## Installation
 
@@ -53,9 +55,16 @@ management**. To uninstall, delete the folder.
    Wi-Fi), or tap **+ Send Book** and then **Turn on Wi-Fi**.
 3. Tap **+ Send Book**. A QR code and the Kindle's local address appear.
 4. Scan the QR code with the same phone. The browser opens *Send to Kindle*.
-5. Tap **Choose File**, pick an EPUB/PDF/..., tap **Upload**.
-6. The Kindle shows **✓ Book received** with **Read Now** / **Done**. The book
-   is already in the library, and the transfer service has shut down.
+5. Tap **Choose Books**, pick one or several EPUB/PDF/… files, tap **Upload**.
+   The phone shows each book's result.
+6. The Kindle shows **✓ Book received** (or *N books received*) with **Read
+   Now** / **Open Library**, **Send More** and **Done**. The books are already
+   in the library, with their covers, and the transfer service has shut down.
+
+While Send Book is open the Kindle does not go to sleep (both KOReader's
+auto-suspend and, on Kindle, the system sleep timer are held and restored
+afterwards). The code expires after 15 minutes without an upload, but never
+while a book is still arriving. An expired screen offers **New Code**.
 
 Books are saved to KOReader's home folder, or to `<home>/documents` on
 Kindle when that folder exists (normally `/mnt/us/documents`). A file with the
@@ -66,22 +75,25 @@ The phone and Kindle can also simply be on the same home/office Wi-Fi.
 ### How the transfer is protected
 
 - The server exists only while the Send Book screen is open. Cancel, Done,
-  the Home key, sleep, and KOReader exiting all stop it and close its
-  sockets.
+  the Home key, pressing the power button, and KOReader exiting all stop it
+  and close its sockets.
 - Every session uses a new 128-bit token from `/dev/urandom` in the URL. It
-  expires after 15 minutes, or earlier when the session ends. Requests without
-  the right token get a 404 and nothing else.
+  expires after 15 idle minutes, or earlier when the session ends. Requests
+  without the right token get a 404 and nothing else.
 - The browser-supplied filename is never used as a path. Separators, `..`,
   absolute paths, NUL bytes and invalid UTF-8 are rejected. VFAT-invalid
   characters are replaced.
 - Uploads stream into a hidden `.part` file in the destination folder. The
   size is checked, the file type is sniffed (EPUB/PDF/MOBI/DJVU headers), and
   only then is the file renamed into place. Interrupted or rejected uploads
-  are deleted. Free space is checked before any byte is written.
+  are deleted. Free space, and whether the folder is writable, are checked
+  before anything is written. If the Kindle loses power mid-upload, the
+  leftover hidden file is deleted the next time KOReader starts.
 - The phone page loads nothing from the network and runs under a strict CSP.
 - On Kindle, an `iptables` rule for the port is added while the server runs
-  and removed afterwards. KOReader's own SSH and HTTP-inspector plugins do the
-  same thing.
+  and removed afterwards, the same way KOReader's own SSH and HTTP-inspector
+  plugins do it. Success or failure is logged (`firewall opened for port …`),
+  so a phone timeout caused by the firewall shows up in `crash.log`.
 
 Plain HTTP on a local link is used (there is no way to get a trusted TLS
 certificate for a hotspot IP). Anyone on the same hotspot who can see the QR
@@ -98,8 +110,10 @@ code/URL could upload a book during the session; keep the hotspot private.
 | The page opened but the upload fails immediately | The Send Book screen was closed or the session expired (the page says so). Start **Send Book** again for a new QR code. |
 | *"Unsupported file type"* | KOReader cannot open that format. Convert it (e.g. with Calibre) to EPUB or PDF. |
 | *"Not enough storage space"* | Free space on the Kindle. |
+| *"…the library folder (it is read-only)"* | The Kindle's storage is mounted read-only (e.g. while connected over USB). Eject/unplug and try again. |
+| Phone times out and `crash.log` shows `iptables … failed` | The Kindle firewall could not be opened (unusual jailbreak setup). Opening the port by hand, or KOReader's SSH plugin, would show the same issue. |
 | Port busy | The server tries ports 8080–8089 automatically; the chosen one is shown under the QR code. |
-| The Kindle went to sleep | Sleep stops the transfer on purpose. Wake the device and start Send Book again. |
+| The Kindle went to sleep | It does not sleep on its own while Send Book is open, but pressing the power button stops the transfer on purpose. Wake it and start Send Book again. |
 
 The logs (`crash.log` in the KOReader folder) include the session lifecycle,
 the chosen address/interface, the port, upload size/type, validation results
@@ -109,44 +123,49 @@ never logged.
 ## Compatibility
 
 Written against KOReader at commit `d9cd278` (master, 2026-09-23;
-koreader-base `9a87297`), the latest source available when this was built.
-Every KOReader API it uses is listed, with its source location, in
+koreader-base `9a87297`) and run against the **KOReader v2026.07.1** Linux
+build. Every KOReader API it uses is listed, with its source location, in
 [docs/KOREADER_APIS.md](docs/KOREADER_APIS.md).
 
 **What has been tested:**
-- The transfer layer (HTTP server, sessions, tokens, upload validation,
-  filename sanitising, IP selection): automated tests under LuaJIT 2.1 +
-  LuaSocket, with curl acting as the phone, on Linux x86-64.
-- The QR payload, encoded with KOReader's own `ffi/qrencode.lua`.
-- All modules: syntax check and luacheck (using KOReader's lint settings).
+- The transfer layer (HTTP server, sessions, several books per session, idle
+  expiry, tokens, upload validation, filename sanitising, stale temp cleanup,
+  IP selection): automated tests under LuaJIT 2.1 + LuaSocket, with curl as
+  the phone.
+- The whole plugin inside KOReader v2026.07.1 (Linux/SDL, 1264×1680 at
+  300 dpi), driven by scripts. That covers every screen, leaving a book →
+  Home, the cover grid, Installed Plugins, Settings → Advanced, and Send Book
+  end to end (QR decoded from the screen, then headless Chromium uploading
+  EPUB + PDF + an unsupported file). It also covers the read-only folder,
+  expiry and stale-file cases. Details: [docs/TESTING.md](docs/TESTING.md).
+- Timings and memory in that emulator: [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 
 **What has not been tested:**
-- Running inside KOReader (emulator or device), including all UI screens.
-- Any Kindle, Kobo or other e-reader.
+- Any Kindle, Kobo or other e-reader (so, no real device timings yet).
+- The Kindle-only commands: `iptables` (firewall) and `lipc-set-prop`
+  (sleep timer). They mirror KOReader's own SSH and Keep alive plugins, and
+  their result is logged.
 - Real phone browsers (iOS Safari, Android Chrome) over a real hotspot.
+- Non-touch Kindles (key navigation is implemented but untested).
 
 **Assumptions / known limitations:**
-- Needs a KOReader recent enough to have `ui/message/simpletcpserver`-style
-  ZMQ polling (`UIManager:insertZMQ`), `ffi/netinfo`, `ui/widget/qrwidget` and
-  `ui/widget/booklist`. Older KOReader releases may lack some of these; that
-  has not been checked.
-- The phone page needs JavaScript (for the progress bar and a streaming
-  upload). There is no no-JS fallback.
-- One upload at a time and one book per session. Use **Send Another** for the
-  next book.
-- Maximum upload size is 500 MB (setting `transfer_max_mb`).
-- The Kindle firewall rule uses `iptables` exactly like KOReader's SSH
-  plugin. Jailbreak setups without `iptables` simply skip it.
-- Covers on the Home screen come only from the Cover browser plugin's cache.
-  With that plugin disabled, or for books it hasn't processed, no cover is
-  shown (the plugin never renders a cover itself).
-- The Library view scans the home folder when opened (up to 2000 books,
-  6 folder levels deep). Very large libraries will open slowly.
+- Needs a KOReader recent enough to have `UIManager:insertZMQ`,
+  `ffi/netinfo`, `ui/widget/qrwidget`, `ui/widget/booklist` and
+  `ffiUtil.runInSubProcess`. Older releases have not been checked.
+- The phone page needs JavaScript (progress bar, streaming upload, several
+  books). There is no no-JS fallback.
+- Books are received one after another (not in parallel). Maximum 500 MB per
+  book (setting `transfer_max_mb`).
+- Covers are extracted the first time a Library page (or Home, or Send Book)
+  shows a book. On a slow device, a page of 9 new books needs a few seconds
+  before all real covers appear. Text covers are shown meanwhile and the page
+  stays usable. Thumbnails are grayscale.
+- Until a book's cover and metadata have been extracted, "Sort by Title" uses
+  its file name.
+- The Library scans the home folder when opened (up to 2000 books, 6 levels
+  deep). The per-book cost is a couple of `stat()` calls.
 - Reading settings (font, size, margins) open KOReader's own in-book menu,
   which means opening the current/last book.
-- Upload throughput is bounded by KOReader's 50 ms main-loop poll while the
-  Send Book screen is open. This is expected to be fine for books, but has not
-  been measured on hardware.
 - IPv4 only.
 
 ## Documentation
@@ -155,14 +174,19 @@ Every KOReader API it uses is listed, with its source location, in
   KOReader investigation (phase 1 report) and the transfer flow.
 - [docs/KOREADER_APIS.md](docs/KOREADER_APIS.md): every KOReader API used,
   with its source location.
-- [docs/TESTING.md](docs/TESTING.md): automated tests and the manual test
-  procedure for devices.
+- [docs/TESTING.md](docs/TESTING.md): automated tests, the emulator runs and
+  the manual test procedure for devices.
+- [docs/PERFORMANCE.md](docs/PERFORMANCE.md): measured timings and memory.
 
 ## Development
 
 ```sh
-sudo apt-get install luajit lua-socket curl lua-check   # Debian/Ubuntu
+sudo apt-get install luajit lua-socket lua-filesystem curl lua-check   # Debian/Ubuntu
 ./tests/run.sh
 # optional: also encode with KOReader's QR encoder
 KOREADER_BASE=/path/to/koreader/base ./tests/run.sh
+
+# run the plugin inside a real KOReader (Docker), see docs/TESTING.md
+tools/emulator.sh start && tools/emulator.sh vnc
+tests/bench/run.sh 150 50        # timing run
 ```

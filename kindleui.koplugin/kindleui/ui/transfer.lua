@@ -17,6 +17,10 @@ KOReader exiting always stops the server and clears the token.
 
 local Blitbuffer = require("ffi/blitbuffer")
 local Books = require("kindleui/util/books")
+local Cache = require("kindleui/util/librarycache")
+local Extractor = require("kindleui/util/extractor")
+local Perf = require("kindleui/util/perf")
+local filemanagerutil = require("apps/filemanager/filemanagerutil")
 local Button = require("ui/widget/button")
 local CenterContainer = require("ui/widget/container/centercontainer")
 local Common = require("kindleui/ui/common")
@@ -35,6 +39,7 @@ local VerticalGroup = require("ui/widget/verticalgroup")
 local VerticalSpan = require("ui/widget/verticalspan")
 local logger = require("logger")
 local _ = require("gettext")
+local N_ = _.ngettext
 local T = require("ffi/util").template
 local Screen = Device.screen
 
@@ -44,6 +49,7 @@ local ERRORS = {
     server = _("Unable to start transfer service."),
     random = _("Unable to start transfer service."),
     dest_dir = _("Unable to start transfer service.\nThe library folder could not be found."),
+    dest_readonly = _("Unable to start transfer service.\nBooks cannot be saved in the library folder (it is read-only)."),
     qr = _("Unable to create transfer QR code."),
 }
 
@@ -68,12 +74,14 @@ function TransferScreen:init()
         self.key_events.Close = { { Device.input.group.Back } }
     end
     self.state = "starting"
+    self.jobs = {} -- cover extraction jobs for received books
     self:startSession()
 end
 
 --- (Re)starts a transfer session and renders the result.
 function TransferScreen:startSession()
     self:stopSession("restart")
+    self.books = {} -- { path, title, authors } received in this session
     local provider = Providers.get(Config.get("transfer_method"))
     local info, err = provider:prepare()
     if not info then
@@ -83,8 +91,9 @@ function TransferScreen:startSession()
     end
     local session
     session, err = provider:start(info, {
-        onProgress = function(filename, received, total)
-            self:setState("receiving", { filename = filename, received = received, total = total })
+        onProgress = function(filename, received, total, index, count)
+            self:setState("receiving", { filename = filename, received = received, total = total,
+                index = index, count = count })
         end,
         onFailed = function(reason, filename)
             self:setState("failed", { reason = reason, filename = filename })
@@ -92,8 +101,11 @@ function TransferScreen:startSession()
         onReceived = function(path, filename)
             self:onBookReceived(path, filename)
         end,
+        onFinished = function()
+            self:onFinished()
+        end,
         onExpired = function()
-            self:setState("error", { message = _("This transfer session has expired.") })
+            self:onExpired()
         end,
     })
     if not session then
@@ -124,25 +136,64 @@ function TransferScreen:stopSession(reason)
     end
 end
 
+-- One book stored (the phone may send more in the same session).
 function TransferScreen:onBookReceived(path, filename)
-    self.session = nil -- already stopped by itself
     Books.refreshLibrary(path)
-    local info = Books.getInfo(self.plugin.ui, path)
-    -- Books never opened have no sidecar metadata yet: ask KOReader (it
-    -- extracts metadata only, without rendering) for a nicer title/author.
-    if self.plugin.ui and self.plugin.ui.bookinfo then
-        local ok, props = pcall(self.plugin.ui.bookinfo.getDocProps, self.plugin.ui.bookinfo, path)
-        if ok and props then
-            info.title = props.display_title or info.title
-            info.authors = props.authors and tostring(props.authors):gsub("\n", ", ") or info.authors
+    local book = { path = path, title = filemanagerutil.splitFileNameType(path) }
+    table.insert(self.books, book)
+    -- Extract title, author and cover now (in a child process), while the
+    -- phone may still be sending: the book then shows up in the Library grid
+    -- with its cover straight away.
+    local entry = Cache.getEntry(self.plugin.ui, path)
+    if entry then
+        book.title = entry.title or book.title
+        book.authors = entry.authors
+        if Cache.needsExtraction(entry) then
+            local w, h = Cache.thumbSize()
+            local t0 = Perf.start()
+            local job = Extractor.start({ { path = path, entry = entry, w = w, h = h } }, {
+                onDone = function(j)
+                    self.jobs[j] = nil
+                    Perf.log("received book indexed (child process)", t0, { has_cover = entry.cover ~= nil })
+                    book.title = entry.title or book.title
+                    book.authors = entry.authors or book.authors
+                    if UIManager:isWidgetShown(self) and (self.state == "received" or self.state == "waiting") then
+                        self:render()
+                    end
+                end,
+            })
+            if job then self.jobs[job] = true end
         end
     end
+    if self.plugin then self.plugin:onLibraryChanged() end
+    self:setState("waiting")
+end
+
+-- The phone finished its batch: the session has stopped itself.
+function TransferScreen:onFinished()
+    self.session = nil
     if self.qr_widget then
         self.qr_widget:free()
         self.qr_widget = nil
     end
-    self:setState("received", { path = path, title = info.title or filename, authors = info.authors })
-    if self.plugin then self.plugin:onLibraryChanged() end
+    self:setState("received", { failure = self.state == "failed" and self.data.reason or nil })
+end
+
+-- Idle expiry: show a clear state (no dead QR code on screen).
+function TransferScreen:onExpired()
+    self.session = nil
+    if self.qr_widget then
+        self.qr_widget:free()
+        self.qr_widget = nil
+    end
+    if #self.books > 0 then
+        self:setState("received", {})
+    else
+        self:setState("error", {
+            message = _("This code has expired.\nTap New Code to show a fresh one."),
+            expired = true,
+        })
+    end
 end
 
 function TransferScreen:setState(state, data)
@@ -200,9 +251,15 @@ function TransferScreen:render()
         })
         space(24)
         if self.state == "failed" then
-            add(text("⚠ " .. (FAILURES[d.reason] or FAILURES.io), Common.face("body"), inner_w))
+            add(text("⚠ " .. (d.filename and (d.filename .. ": ") or "") .. (FAILURES[d.reason] or FAILURES.io),
+                Common.face("body"), inner_w))
             space(8)
             add(text(_("You can try again from your phone."), Common.face("small"), inner_w))
+        elseif #self.books > 0 then
+            add(text(T(N_("✓ 1 book received so far.", "✓ %1 books received so far.", #self.books), #self.books),
+                Common.face("body"), inner_w))
+            space(6)
+            add(text(_("Waiting for more books…"), Common.face("body"), inner_w))
         else
             add(text(_("Scan with your phone."), Common.face("body"), inner_w))
             space(6)
@@ -217,10 +274,14 @@ function TransferScreen:render()
         add(text(_("Your phone must be the hotspot the Kindle is connected to (or on the same Wi-Fi)."),
             Common.face("small"), inner_w))
         space(28)
-        add(self:_button(_("Cancel"), function() self:onClose() end, btn_w))
+        add(self:_button(#self.books > 0 and _("Done") or _("Cancel"), function() self:onClose() end, btn_w))
     elseif self.state == "receiving" then
         local pct = d.total and d.total > 0 and math.floor(d.received * 100 / d.total) or 0
-        add(text(_("Receiving…"), Common.face("body"), inner_w))
+        local head = _("Receiving…")
+        if d.index and d.count and d.count > 1 then
+            head = T(_("Receiving book %1 of %2…"), d.index, d.count)
+        end
+        add(text(head, Common.face("body"), inner_w))
         space(10)
         add(text(d.filename or "", Common.face("book_title"), inner_w))
         space(24)
@@ -235,21 +296,47 @@ function TransferScreen:render()
         space(40)
         add(self:_button(_("Cancel"), function() self:onClose() end, btn_w))
     elseif self.state == "received" then
-        add(text("✓ " .. _("Book received"), Common.face("title"), inner_w))
-        space(24)
-        add(text(d.title or "", Common.face("book_title"), inner_w))
-        if d.authors then
-            space(6)
-            add(text(d.authors, Common.face("body"), inner_w))
+        local n = #self.books
+        if n == 0 then
+            add(text(_("No books were added."), Common.face("title"), inner_w))
+            if d.failure then
+                space(12)
+                add(text(FAILURES[d.failure] or FAILURES.io, Common.face("body"), inner_w))
+            end
+        else
+            add(text("✓ " .. (n == 1 and _("Book received") or T(_("%1 books received"), n)),
+                Common.face("title"), inner_w))
+            space(24)
+            local shown = math.min(n, 5)
+            for i = 1, shown do
+                local book = self.books[i]
+                add(text(book.title or "", Common.face("book_title"), inner_w))
+                if book.authors and n <= 2 then
+                    space(4)
+                    add(text(book.authors, Common.face("body"), inner_w))
+                end
+                space(10)
+            end
+            if n > shown then
+                add(text(T(_("and %1 more"), n - shown), Common.face("body"), inner_w))
+            end
         end
-        space(40)
-        add(self:_button(_("Read Now"), function()
-            local path = d.path
-            UIManager:close(self)
-            self.plugin:openBook(path)
-        end, btn_w))
-        space(16)
-        add(self:_button(_("Send Another"), function() self:startSession() end, btn_w))
+        space(30)
+        if n == 1 then
+            add(self:_button(_("Read Now"), function()
+                local path = self.books[1].path
+                UIManager:close(self)
+                self.plugin:openBook(path)
+            end, btn_w))
+            space(16)
+        elseif n > 1 then
+            add(self:_button(_("Open Library"), function()
+                UIManager:close(self)
+                self.plugin:showLibrary()
+            end, btn_w))
+            space(16)
+        end
+        add(self:_button(_("Send More"), function() self:startSession() end, btn_w))
         space(16)
         add(self:_button(_("Done"), function() self:onClose() end, btn_w))
     else -- error
@@ -262,7 +349,7 @@ function TransferScreen:render()
             end, btn_w))
             space(16)
         end
-        add(self:_button(_("Try Again"), function() self:startSession() end, btn_w))
+        add(self:_button(d.expired and _("New Code") or _("Try Again"), function() self:startSession() end, btn_w))
         space(16)
         add(self:_button(_("Close"), function() self:onClose() end, btn_w))
     end
@@ -296,6 +383,8 @@ end
 function TransferScreen:onCloseWidget()
     -- Always tear down the server, whatever the reason we are closing.
     self:stopSession("cancelled")
+    for job in pairs(self.jobs) do job:cancel() end
+    self.jobs = {}
     if self.plugin then
         self.plugin:onChildClosed()
     end

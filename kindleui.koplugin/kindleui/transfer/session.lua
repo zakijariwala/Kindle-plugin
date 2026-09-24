@@ -4,12 +4,14 @@ A single, short-lived transfer session.
 A session owns:
   * a cryptographically random token (only valid while the session lives),
   * the temporary HTTP server (registered with the UI main loop),
-  * at most one in-flight upload.
+  * at most one in-flight upload at a time (a phone may send several books
+    one after another in the same session).
 
 It ends (server stopped, sockets closed, token cleared) when:
-  * a book has been received successfully,
+  * the phone reports its batch is finished (POST /<token>/finish),
   * the user cancels,
-  * the session expires,
+  * the session has been idle for `timeout` seconds (never while a file is
+    arriving: a slow upload is not cut off by the expiry),
   * the device suspends or KOReader exits.
 
 KOReader-specific services are injected (`scheduler`, `firewall`,
@@ -40,6 +42,7 @@ local PHONE_MSG = {
     corrupt = "The uploaded file could not be added.",
     incomplete = "Upload interrupted. Please try again.",
     io = "The uploaded file could not be added.",
+    received = "Received.",
     done = "Book sent successfully.",
 }
 Session.PHONE_MSG = PHONE_MSG
@@ -49,12 +52,13 @@ Session.PHONE_MSG = PHONE_MSG
 --   is_supported  (function) filename -> bool (KOReader DocumentRegistry)
 --   scheduler     (table)    UIManager-like: scheduleIn, unschedule, nextTick, insertZMQ, removeZMQ
 --   port          (int)      preferred port
---   timeout       (int)      session lifetime in seconds
+--   timeout       (int)      idle lifetime in seconds (reset by every upload)
 --   max_bytes     (int)      largest accepted upload
 --   firewall      (table)    optional { open(port), close(port) }
---   callbacks     (table)    onProgress(filename, received, total),
---                            onReceived(path, filename), onFailed(reason, filename),
---                            onExpired(), onStopped()
+--   callbacks     (table)    onProgress(filename, received, total, index, count),
+--                            onReceived(path, filename, index, count),
+--                            onFailed(reason, filename), onFinished(paths),
+--                            onExpired(), onStopped(reason)
 --   logger        (table)    optional KOReader logger
 --   random_source (string)   optional, tests only
 function Session:new(o)
@@ -63,6 +67,7 @@ function Session:new(o)
     o.timeout = o.timeout or 15 * 60
     o.max_bytes = o.max_bytes or 500 * 1024 * 1024
     o.callbacks = o.callbacks or {}
+    o.clock = o.clock or os.time
     o.state = "new"
     return setmetatable(o, self)
 end
@@ -82,12 +87,16 @@ function Session:_emit(name, ...)
 end
 
 --- Starts the session. Returns true, or nil + reason
--- ("random" | "server" | "dest_dir").
+-- ("random" | "server" | "dest_dir" | "dest_readonly").
 function Session:start()
     assert(self.state == "new", "Session:start called twice")
     if not FS.isDir(self.dest_dir) then
         self:_log("err", "destination directory missing:", self.dest_dir)
         return nil, "dest_dir"
+    end
+    if not FS.isWritableDir(self.dest_dir) then
+        self:_log("err", "destination directory not writable:", self.dest_dir)
+        return nil, "dest_readonly"
     end
     local token, err = Security.randomToken(16, self.random_source)
     if not token then
@@ -113,17 +122,42 @@ function Session:start()
         self.firewall_open = true
     end
     self.scheduler:insertZMQ(self.server)
+    self.received = {}
+    self:_touch()
     self.expire_action = function()
         self.expire_action = nil
-        self:_log("info", "session expired")
-        self:stop("expired")
+        self:_checkExpiry()
     end
     self.scheduler:scheduleIn(self.timeout, self.expire_action)
-    self.expires_at = os.time() + self.timeout
     self.state = "waiting"
     -- Deliberately not logging the token or full URL.
     self:_log("info", "session started, port", self.port, "timeout", self.timeout, "s")
     return true
+end
+
+-- Pushes the idle deadline back (called on start and on every upload).
+function Session:_touch()
+    self.expires_at = self.clock() + self.timeout
+end
+
+-- Fires at the (old) deadline; re-arms itself while uploads keep it alive.
+function Session:_checkExpiry()
+    if self.state == "stopped" then return end
+    local remaining = (self.expires_at or 0) - self.clock()
+    if self.state == "receiving" then
+        -- never expire mid-upload: look again a little later
+        remaining = math.max(remaining, math.min(self.timeout, 60))
+    end
+    if remaining > 0 then
+        self.expire_action = function()
+            self.expire_action = nil
+            self:_checkExpiry()
+        end
+        self.scheduler:scheduleIn(remaining, self.expire_action)
+        return
+    end
+    self:_log("info", "session expired")
+    self:stop("expired")
 end
 
 --- Path component of the upload URL (the part after the host), e.g. "/<token>".
@@ -172,11 +206,12 @@ function Session:_route(path)
     if not tok or not self.token or not Security.constantTimeEquals(tok, self.token) then
         return nil
     end
-    if self.expires_at and os.time() > self.expires_at then
+    if self.state ~= "receiving" and self.expires_at and self.clock() > self.expires_at then
         return nil
     end
     if rest == "" or rest == "/" then return "page" end
     if rest == "/upload" then return "upload" end
+    if rest == "/finish" then return "finish" end
     return "unknown"
 end
 
@@ -202,11 +237,23 @@ function Session:onHeaders(req)
             content_type = "text/html; charset=utf-8",
             csp = UploadPage.CSP,
             body = UploadPage.render{
-                upload_path = self:getPath() .. "/upload",
+                base_path = self:getPath(),
                 formats = self.format_list,
                 max_mb = math.floor(self.max_bytes / (1024 * 1024)),
             },
         }
+    end
+    if route == "finish" then
+        if req.method ~= "POST" then return text(405, "Method not allowed.") end
+        if self.active_job then return text(409, PHONE_MSG.busy) end
+        local paths = self.received
+        self:_log("info", "phone finished; books received:", #paths)
+        -- Stop on the next tick, *after* the server has sent this response.
+        self.scheduler:nextTick(function()
+            self:stop("done")
+            self:_emit("onFinished", paths)
+        end)
+        return text(200, PHONE_MSG.done)
     end
     if route ~= "upload" then return text(404, "Not found.") end
     if req.method ~= "POST" and req.method ~= "PUT" then return text(405, "Method not allowed.") end
@@ -253,8 +300,12 @@ function Session:onHeaders(req)
     self.active_job = job
     self.state = "receiving"
     self.last_progress_pct = -1
-    self:_log("info", "upload started:", len, "bytes, type", job.ext)
-    self:_emit("onProgress", filename, 0, len)
+    local index = tonumber(req.query.index)
+    local count = tonumber(req.query.count)
+    job.index, job.count = index, count
+    self:_log("info", "upload started:", len, "bytes, type", job.ext,
+        index and count and string.format("(%d of %d)", index, count) or "")
+    self:_emit("onProgress", filename, 0, len, index, count)
     -- Progress is reported from a light wrapper to keep UploadJob UI-agnostic.
     local session = self
     local orig_write = job.write
@@ -265,7 +316,7 @@ function Session:onHeaders(req)
             -- E-ink friendly: report in 10% steps only.
             if pct >= session.last_progress_pct + 10 or pct == 100 then
                 session.last_progress_pct = pct - pct % 10
-                session:_emit("onProgress", filename, j.received, j.expected_size)
+                session:_emit("onProgress", filename, j.received, j.expected_size, j.index, j.count)
             end
         end
         return r1, r2
@@ -276,21 +327,18 @@ end
 
 function Session:onUploadDone(req, job)
     self.active_job = nil
+    self.state = "waiting"
+    self:_touch()
     local path, err = job:finish()
     if not path then
-        self.state = "waiting"
         self:_log("warn", "validation failed:", err)
         self:_emit("onFailed", err, job.filename)
         return text(err == UploadJob.ERR_DISK_FULL and 507 or 422, PHONE_MSG[err] or PHONE_MSG.io)
     end
-    self.received_path = path
+    table.insert(self.received, path)
     self:_log("info", "upload complete, stored in destination directory")
-    -- Stop on the next tick, *after* the server has sent this response.
-    self.scheduler:nextTick(function()
-        self:stop("done")
-        self:_emit("onReceived", path, job.filename)
-    end)
-    return text(200, PHONE_MSG.done)
+    self:_emit("onReceived", path, job.filename, job.index, job.count)
+    return text(200, PHONE_MSG.received)
 end
 
 function Session:onUploadFailed(req, job, reason)
@@ -298,6 +346,7 @@ function Session:onUploadFailed(req, job, reason)
         self.active_job = nil
         if self.state == "receiving" then self.state = "waiting" end
     end
+    self:_touch()
     self:_log("warn", "upload failed:", reason)
     if reason ~= "server_stopped" then
         self:_emit("onFailed", reason, job.filename)

@@ -35,17 +35,19 @@ local function isSupported(name)
 end
 
 local function newSession(dest, extra)
-    local events = { progress = {}, failed = {}, received = {}, stopped = {}, expired = 0 }
+    local events = { progress = {}, failed = {}, received = {}, stopped = {}, finished = {}, expired = 0 }
     local sched = Scheduler.new()
     local o = {
         dest_dir = dest,
         is_supported = isSupported,
         scheduler = sched,
         port = 18080,
+        clock = socket.gettime,
         timeout = 60,
         max_bytes = 5 * 1024 * 1024,
         callbacks = {
-            onProgress = function(name, got, total) table.insert(events.progress, { name, got, total }) end,
+            onProgress = function(name, got, total, index, count) table.insert(events.progress, { name, got, total, index, count }) end,
+            onFinished = function(paths) table.insert(events.finished, paths) end,
             onFailed = function(reason, name) table.insert(events.failed, reason) end,
             onReceived = function(path, name) table.insert(events.received, path) end,
             onStopped = function(reason) table.insert(events.stopped, reason) end,
@@ -107,7 +109,7 @@ T.ok(path and #path == 33, "URL path is /<32-hex token>")
 local code, body = curl(sched, base .. path)
 T.eq(code, 200, "GET upload page with valid token")
 T.ok(body:find("SEND TO KINDLE", 1, true), "page contains title")
-T.ok(body:find(path .. "/upload", 1, true), "page posts to tokenized path")
+T.ok(body:find('"' .. path .. '"', 1, true), "page posts to tokenized path")
 T.ok(not body:find("https?://%w"), "page references no external URL")
 
 code = curl(sched, base .. "/00000000000000000000000000000000")
@@ -167,9 +169,8 @@ T.ok(s:isActive(), "session survives an interrupted upload")
 -- ---------------------------------------------------------------------------
 T.section("successful EPUB upload (unicode + spaces)")
 local name = "Ünïcödé Bøøk — The Hobbit.epub"
-code, body = curl(sched, string.format("-X POST -H 'Content-Type: application/octet-stream' --data-binary @%s '%s%s/upload?name=%s'", epub, base, path, urlencode(name)))
+code, body = curl(sched, string.format("-X POST -H 'Content-Type: application/octet-stream' --data-binary @%s '%s%s/upload?name=%s&index=1&count=1'", epub, base, path, urlencode(name)))
 T.eq(code, 200, "upload accepted")
-T.ok(body:find("Book sent successfully", 1, true), "success message")
 T.eq(#ev.received, 1, "UI notified of received book")
 T.eq(ev.received[1], dest .. "/" .. name, "stored under sanitized original name")
 local f = io.open(dest .. "/" .. name, "rb")
@@ -177,7 +178,14 @@ local stored = f and f:read("*a") f = f and f:close()
 local fo = io.open(epub, "rb") local orig = fo:read("*a") fo:close()
 T.ok(stored == orig, "stored bytes identical to sent bytes")
 T.ok(#ev.progress >= 2, "progress reported")
-T.eq(ev.stopped[#ev.stopped], "done", "session stopped after success")
+T.eq(ev.progress[#ev.progress][4], 1, "progress carries book index")
+T.ok(s:isActive(), "session stays open for more books until the phone finishes")
+code, body = curl(sched, string.format("-X POST '%s%s/finish'", base, path))
+T.eq(code, 200, "finish accepted")
+T.ok(body:find("Book sent successfully", 1, true), "success message")
+T.eq(#ev.finished, 1, "UI notified that the batch finished")
+T.eq(ev.finished[1] and #ev.finished[1], 1, "finish reports the received books")
+T.eq(ev.stopped[#ev.stopped], "done", "session stopped after finish")
 T.eq(#sched.zmqs, 0, "server unregistered from main loop")
 T.ok(s.token == nil, "token cleared")
 T.ok(s.server == nil, "server released")
@@ -186,25 +194,26 @@ T.ok(not c:connect("127.0.0.1", s.port), "port closed after session ends")
 c:close()
 
 -- ---------------------------------------------------------------------------
-T.section("repeat transfer, duplicate names, old token invalid")
+T.section("several books in one session, duplicate names, old token invalid")
 local s2, sched2, ev2 = newSession(dest)
 T.ok(s2:start(), "new session starts on same port")
 T.ok(s2:getPath() ~= path, "new token differs from old one")
 base = "http://127.0.0.1:" .. s2.port
 code = curl(sched2, base .. path)
 T.eq(code, 404, "old QR/token rejected by new session")
-code = curl(sched2, string.format("-X POST --data-binary @%s '%s%s/upload?name=%s'", epub, base, s2:getPath(), urlencode(name)))
-T.eq(code, 200, "same name uploaded again")
+code = curl(sched2, string.format("-X POST --data-binary @%s '%s%s/upload?name=%s&index=1&count=3'", epub, base, s2:getPath(), urlencode(name)))
+T.eq(code, 200, "book 1 of 3 (same name as before)")
+code = curl(sched2, string.format("-X POST --data-binary @%s '%s%s/upload?name=nope.exe&index=2&count=3'", epub, base, s2:getPath()))
+T.eq(code, 415, "book 2 of 3 rejected")
+code = curl(sched2, string.format("-X POST -H 'Expect: 100-continue' --data-binary @%s '%s%s/upload?name=My%%20Doc.pdf&index=3&count=3'", pdf, base, s2:getPath()))
+T.eq(code, 200, "book 3 of 3 (PDF, Expect: 100-continue)")
+T.ok(s2:isActive(), "rejected book does not end the session")
+code = curl(sched2, string.format("-X POST '%s%s/finish'", base, s2:getPath()))
+T.eq(code, 200, "finish")
 T.eq(ev2.received[1], dest .. "/Ünïcödé Bøøk — The Hobbit (2).epub", "existing book not overwritten")
-
--- ---------------------------------------------------------------------------
-T.section("PDF upload + Expect: 100-continue")
-local s3, sched3, ev3 = newSession(dest)
-T.ok(s3:start(), "session starts")
-base = "http://127.0.0.1:" .. s3.port
-code = curl(sched3, string.format("-X POST -H 'Expect: 100-continue' --data-binary @%s '%s%s/upload?name=My%%20Doc.pdf'", pdf, base, s3:getPath()))
-T.eq(code, 200, "PDF accepted")
-T.eq(ev3.received[1], dest .. "/My Doc.pdf", "PDF stored")
+T.eq(ev2.received[2], dest .. "/My Doc.pdf", "PDF stored")
+T.eq(ev2.finished[1] and #ev2.finished[1], 2, "two books reported at finish")
+T.eq(ev2.stopped[1], "done", "stopped once finished")
 
 -- ---------------------------------------------------------------------------
 T.section("cancel / expiry / disk full")
@@ -229,6 +238,36 @@ T.eq(ev5.expired, 1, "session expired")
 T.ok(not s5:isActive() and s5.token == nil, "expired session cleared token")
 T.eq(#sched5.zmqs, 0, "expired session stopped server")
 
+local s7, sched7, ev7 = newSession(dest, { timeout = 0.3 })
+T.ok(s7:start(), "short-lived session starts")
+do
+    local c7 = socket.tcp() c7:settimeout(2)
+    assert(c7:connect("127.0.0.1", s7.port))
+    local total = 4 + 2000
+    c7:send("POST " .. s7:getPath() .. "/upload?name=slow.epub HTTP/1.1\r\nHost: x\r\nContent-Length: " .. total .. "\r\n\r\nPK\3\4")
+    -- trickle the body for ~1.2 s: four times the idle timeout
+    for _ = 1, 12 do
+        c7:send(string.rep("s", 150))
+        local t = socket.gettime() + 0.1
+        while socket.gettime() < t do sched7:step() end
+    end
+    T.ok(s7:isActive() and ev7.expired == 0, "no expiry while a book is arriving")
+    c7:send(string.rep("s", 2000 - 12 * 150))
+    local reply = ""
+    local t = socket.gettime() + 2
+    while socket.gettime() < t and not reply:find("\r\n\r\n") do
+        sched7:step()
+        local d, _, partial = c7:receive(4096)
+        c7:settimeout(0)
+        reply = reply .. (d or partial or "")
+    end
+    c7:close()
+    T.ok(reply:find("^HTTP/1.1 200"), "slow upload completes after the nominal expiry")
+end
+local t7 = socket.gettime() + 1.5
+while socket.gettime() < t7 do sched7:step() end
+T.eq(ev7.expired, 1, "session expires once idle again")
+
 local s6, sched6, ev6 = newSession(dest, { free_space = function() return 100 end })
 T.ok(s6:start(), "session starts")
 code, body = curl(sched6, string.format("-X POST --data-binary @%s '%s%s/upload?name=x.epub'", epub, "http://127.0.0.1:" .. s6.port, s6:getPath()))
@@ -236,6 +275,22 @@ T.eq(code, 507, "insufficient storage reported to phone")
 T.ok(body:find("Not enough storage", 1, true), "disk full message")
 T.eq(ev6.failed[1], "disk_full", "UI notified: disk full")
 s6:stop("cancelled")
+
+T.section("read-only library folder")
+do
+    local ro = T.tmpdir()
+    os.execute('chmod 555 "' .. ro .. '"')
+    local s8 = newSession(ro)
+    local ok8, why8 = s8:start()
+    if io.open(ro .. "/.w", "wb") then -- running as root: permissions are not enforced
+        os.remove(ro .. "/.w")
+        io.write("  skip read-only check (running as root)\n")
+        if ok8 then s8:stop("cancelled") end
+    else
+        T.ok(not ok8 and why8 == "dest_readonly", "refuses to start: library folder not writable")
+    end
+    os.execute('chmod 755 "' .. ro .. '"')
+end
 
 T.section("no leftovers")
 local leftovers = 0

@@ -16,159 +16,222 @@ KOReader stays the platform. The plugin is a thin presentation layer:
 └───────────────────────────────────┘
 ```
 
-Rules the code follows:
-
 - **Nothing is re-implemented.** Books open through `FileManager:openFile` /
-  `ReaderUI:showReader`. Metadata comes from KOReader's sidecars through
-  `FileManagerBookInfo:getDocProps` and `BookList`. Settings entries are
-  KOReader's own menu entries, and plugin menus are the plugins' own.
-- **Nothing is monkey-patched.** No KOReader or third-party function is
-  replaced or wrapped.
-- **No dead ends.** The Back key on Home reveals KOReader's file browser.
-  Settings → Advanced opens KOReader's full menu. Installed Plugins lists
-  every plugin and links to KOReader's Plugin management.
-- **Nothing runs in the background.** Home is a static widget with no timers.
-  The HTTP server exists only while the Send Book screen is open.
+  `ReaderUI:showReader`. Metadata comes from KOReader's sidecars and document
+  engines. Settings entries are KOReader's own menu entries, and plugin menus
+  are the plugins' own.
+- **Nothing is monkey-patched.** Home reappears after reading because KOReader
+  creates a new plugin instance whenever it builds a file browser (exact
+  mechanism in [KOREADER_APIS.md](KOREADER_APIS.md#how-the-home-screen-comes-back-when-you-leave-a-book)).
+- **No dead ends.** Back on Home shows KOReader's file browser. Settings →
+  Advanced opens KOReader's full menu. Installed Plugins lists every plugin.
+- **Nothing runs in the background.** Work happens only while the screen that
+  needs it is open: Send Book's server, and cover extraction for the Library
+  page on screen.
 
 ## Phase 1 report: what KOReader already provides
 
 Inspected: `koreader/koreader` master `d9cd278` (2026-09-23) and
-`koreader/koreader-base` `9a87297`.
+`koreader/koreader-base` `9a87297`. The plugin was then run against the
+KOReader v2026.07.1 Linux build.
 
 | Need | Existing KOReader facility | Decision |
 | --- | --- | --- |
-| Plugin lifecycle | `frontend/pluginloader.lua`: discovers `*.koplugin` in `plugins/` and `<data>/plugins/`, `dofile`s `main.lua`, merges `_meta.lua`, and instantiates per FileManager/ReaderUI with `{ ui = … }` | Standard `WidgetContainer` plugin, `is_doc_only = false` |
-| Plugin discovery | `PluginLoader:loadPlugins()` → enabled/disabled module lists; `PluginLoader:getPluginInstance(name)` | Used as-is for Installed Plugins |
-| Plugin menus | Plugins implement `addToMainMenu(menu_items)`; FileManagerMenu/ReaderMenu call it for each registered widget (and `dbg:guard` calls it on a mock table) | Call it on a scratch table and show the result in `TouchMenu` |
-| Menus | `ui/widget/touchmenu` (tabbed), `ui/widget/menu` (full-screen lists), `ui/menusorter` (`findById`) | Reused; KOReader's own items fetched by id |
-| Library data | `FileChooser` (browsing), `util.findFiles`, `DocumentRegistry` (supported formats), `BookList.getBookInfo` (progress/status from sidecar), `FileManagerBookInfo:getDocProps(file, nil, true)` (metadata without opening), `ReadHistory` | Reused. The simple library is a scan-on-open view, not an index |
-| Covers | Cover browser plugin's `BookInfoManager` SQLite cache | Read-only, and only when that plugin is enabled |
-| Open/return to reader | `FileManager:openFile`, `ReaderUI:showReader(…, after_open_callback)`, `ReaderUI:onHome` → `showFileManager` | Reused. Home reappears whenever the file browser is created |
-| Network state | `NetworkMgr:isConnected()` (link + IP, no internet check), `NetworkMgr:runWhenConnected()` | Reused for the Wi-Fi pre-flight |
-| Local IP | `ffi/netinfo` (`getifaddrs`), `Device:getDefaultRoute()`, `NetworkMgr:getNetworkInterfaceName()` | Reused, plus a UDP route lookup and `ip`/`ifconfig` fallbacks |
-| QR codes | `ffi/qrencode` (pure Lua) + `ui/widget/qrwidget` | Reused |
-| HTTP server | `ui/message/simpletcpserver.lua` (LuaSocket) polled by `UIManager:insertZMQ` (used by the HTTP-inspector plugin). It reads headers only and would buffer everything in RAM | Same integration pattern, but our own small server so bodies stream to disk without blocking the UI |
-| Kindle firewall | SSH / HTTP-inspector plugins add and remove `iptables` rules around their port | Same approach |
-| Existing upload plugins | None in core: Calibre wireless is a *client* of Calibre, SSH/FTP need extra tools | Not reusable for browser uploads |
-| Settings storage | `G_reader_settings` | One key: `kindleui` |
-
-APIs are listed with file references in [KOREADER_APIS.md](KOREADER_APIS.md).
+| Plugin lifecycle | `frontend/pluginloader.lua`: discovers `*.koplugin` in `plugins/` and `<data>/plugins/`, merges `_meta.lua`, creates an instance per FileManager/ReaderUI with `{ ui = … }` | Standard `WidgetContainer` plugin, `is_doc_only = false` |
+| Plugin discovery | `PluginLoader:loadPlugins()` → enabled/disabled module lists; `getPluginInstance(name)` | Used as-is for Installed Plugins |
+| Plugin menus | Plugins implement `addToMainMenu(menu_items)`, called by FileManagerMenu/ReaderMenu | Called on a scratch table, only for the plugin tapped, and shown in `TouchMenu` |
+| Menus | `TouchMenu`, `Menu`, `MenuSorter:findById` | Reused; KOReader's own entries fetched by id |
+| Library data | `DocumentRegistry` (formats), `BookList`/`FileManagerBookInfo` (sidecar metadata, progress), `ReadHistory` | Reused, behind a small mtime-validated cache |
+| Covers | Document engines via `FileManagerBookInfo:getCoverImage`; Cover browser shows how to run extraction in a child process | Same approach, without depending on Cover browser |
+| Open/return to reader | `FileManager:openFile`, `ReaderUI:showReader`, `ReaderUI:onHome`/`showFileManager` | Reused; Home reappears whenever a FileManager is created |
+| Network state | `NetworkMgr:isConnected()` (link + IP, no internet check), `runWhenConnected()` | Wi-Fi pre-flight |
+| Local IP | `ffi/netinfo` (getifaddrs), `Device:getDefaultRoute()`, `NetworkMgr:getNetworkInterfaceName()` | Reused, plus a UDP route lookup and `ip`/`ifconfig` fallbacks |
+| QR codes | `ffi/qrencode` + `ui/widget/qrwidget` | Reused |
+| HTTP server | `ui/message/simpletcpserver.lua` (LuaSocket) polled via `UIManager:insertZMQ` (HTTP-inspector plugin). It reads headers only and would buffer in RAM | Same integration, own small server that streams bodies to disk |
+| Kindle firewall / sleep | SSH & HTTP-inspector plugins (`iptables`), Keep alive plugin (`lipc … preventScreenSaver`), AutoSuspend (`PluginShare.pause_auto_suspend`) | Same switches, restored afterwards |
+| Existing upload plugins | None in core (Calibre wireless is a *client*; SSH/FTP need extra tools) | Not reusable for browser uploads |
+| Settings storage | `G_reader_settings`, `LuaSettings` | One key `kindleui`; one cache file |
 
 ## Module map
 
 ```
 kindleui.koplugin/
 ├── _meta.lua                 fullname/description for Plugin management
-├── main.lua                  plugin class: init, menu entry, dispatcher actions,
-│                             navigation between screens, KOReader delegation
+├── main.lua                  plugin class: init (Home on FileManager creation,
+│                             stale temp cleanup), menu entry, dispatcher actions,
+│                             navigation, KOReader delegation
 └── kindleui/                 (namespaced so requires never collide with KOReader's)
     ├── config.lua            defaults + G_reader_settings["kindleui"]
     ├── ui/
     │   ├── common.lua        fonts, lines, Tappable, single-tab TouchMenu helper
-    │   ├── home.lua          Home screen (FocusManager: works with keys too)
-    │   ├── library.lua       My Library (Menu subclass)
-    │   ├── plugins.lua       Installed Plugins (Menu subclass)
+    │   ├── home.lua          Home (FocusManager: works with keys too)
+    │   ├── library.lua       data loading + sort + options dialog + list view
+    │   ├── librarygrid.lua   cover grid view (default)
+    │   ├── plugins.lua       Installed Plugins (menus built only on tap)
     │   ├── settings.lua      Settings item tree (TouchMenu)
     │   └── transfer.lua      Send Book screen (state machine)
     ├── transfer/
-    │   ├── provider.lua      provider registry (local_http | cloud placeholder)
-    │   ├── localhttp.lua     "Local Wi-Fi" provider (pre-flight + session wiring)
-    │   ├── session.lua       token, expiry, routing, validation, lifecycle
+    │   ├── provider.lua      provider registry (only local_http today)
+    │   ├── localhttp.lua     "Local Wi-Fi" provider (pre-flight, session, sleep guard)
+    │   ├── session.lua       token, idle expiry, routing, validation, lifecycle
     │   ├── server.lua        non-blocking HTTP/1.1 server (LuaSocket)
     │   ├── upload.lua        temp file → validate → atomic rename
-    │   ├── uploadpage.lua    the phone page (HTML + tiny vanilla JS)
+    │   ├── uploadpage.lua    the phone page (HTML + small vanilla JS, multi-file)
     │   └── qr.lua            URL + QRWidget
     └── util/
-        ├── books.lua         adapter to KOReader library/metadata/open APIs
-        ├── network.lua       IPv4 discovery, Kindle firewall
-        ├── filesystem.lua    paths, free space, unique names, format sniffing
+        ├── books.lua         adapter to KOReader library/open APIs, folder scan
+        ├── librarycache.lua  metadata + thumbnail cache (one file + small .bbz files)
+        ├── extractor.lua     cover/metadata extraction in a child process
+        ├── sleepguard.lua    hold/restore AutoSuspend + Kindle screensaver timer
+        ├── perf.lua          "KindleUI perf:" timing/memory log lines
+        ├── network.lua       IPv4 discovery, Kindle firewall (logged)
+        ├── filesystem.lua    paths, free space, writability, unique names,
+        │                     format sniffing, stale temp cleanup
         └── security.lua      CSPRNG tokens, constant-time compare, filename sanitizer
 ```
 
-`transfer/{session,server,upload,uploadpage}` and `util/{security,filesystem,network}`
-depend on nothing KOReader-specific at load time (services are injected or
-`pcall`-required), so they run under plain LuaJIT in the tests.
+`transfer/{session,server,upload,uploadpage,qr}` and
+`util/{security,filesystem,network}` load under plain LuaJIT, so the automated
+tests run them without KOReader.
 
 ## Screen flow
 
 ```
-KOReader starts → FileManager created → plugin init → nextTick: show Home
+KOReader starts / a book is closed → new FileManager → plugin init → nextTick: Home
 Home ─ Continue Reading ─→ FileManager:openFile ─→ reader
-     ─ My Library ───────→ Library (Menu) ─ tap book ─→ reader
-                                          ─ ☰ → sort / refresh / "Browse all files (KOReader)"
+     ─ My Library ───────→ cover grid (or list) ─ tap ─→ reader
+                                                 ─ hold ─→ KOReader book details
+                                                 ─ ☰ ─→ view, sort, refresh, "Browse all files (KOReader)"
      ─ + Send Book ──────→ TransferScreen
-     ─ Installed Plugins ─→ Plugins (Menu) ─ Open ─→ plugin's own menu (TouchMenu)
-                                           ─ Manage plugins (KOReader)
-     ─ Settings ─────────→ TouchMenu: Reading/Library/Device/Connectivity/Advanced/About
-                                                     └ Advanced → Open KOReader Settings
-reader ─ Home key / "Kindle-style Home" menu entry ─→ ReaderUI:onHome → FileManager → Home
-Home ─ Back key ─→ KOReader file browser (Home closes; reopen from ☰ menu)
+     ─ Installed Plugins ─→ list ─ tap ─→ that plugin's own menu (TouchMenu)
+     ─ Settings ─────────→ Reading / Library / Device / Connectivity / Advanced / About
+                                                         └ Advanced → Open KOReader Settings
+reader ─ top menu file-browser icon, Home key, "File browser" gesture ─→ FileManager → Home
+Home ─ Back key ─→ KOReader file browser (☰ → Kindle-style Home brings it back)
 ```
+
+## Library: cache, covers, memory
+
+**Data on open.** `Library.loadBooks` does:
+1. Scan the home folder: `lfs.dir` + `lfs.attributes` per entry. Hidden
+   folders and `.sdr` folders are skipped.
+2. For each book, stat its KOReader sidecar (`DocSettings:findSidecarFile`).
+3. Re-read a sidecar (title, author, progress) **only if its mtime changed**
+   since the last time. Otherwise the values come from `kindleui_library.lua`,
+   which is loaded once per KOReader process.
+4. Sort in memory.
+
+For 150 books: 50 sidecar reads the first time, then **0** on every later open
+until a book is read again.
+
+**Covers.** Stored per book as a zstd-compressed grayscale blitbuffer
+(`kindleui_covers/<md5>.bbz`, typically a few KB). Showing a page loads at most
+9 of them, and needs no image decoding.
+
+- **Extraction:** a book without a thumbnail is extracted once, only when it is
+  on the visible page, and only while the Library is open. The first page
+  appears straight away with text covers (title + author), and real covers
+  replace them tile by tile.
+- **Books from Send Book:** extracted as soon as they arrive, so they already
+  have a cover in the grid.
+- **Blank first pages:** a cover that is (almost) a blank page, which is common
+  for PDFs, is dropped so the text cover is used instead.
+
+**Memory: why extraction runs in a child process.** Opening documents inside
+KOReader's own process makes its document engines keep memory after
+`document:close()`. Measured in the emulator:
+
+| Extraction of N distinct books, in-process | RSS growth |
+| --- | --- |
+| 25 | +57 MB |
+| 75 | +132 MB |
+| 150 | +245 MB (no plateau) |
+| same 30 books again | +0 MB (per-document cache) |
+
+A Paperwhite has far too little RAM for that. So extraction runs in a forked
+child (`ffiUtil.runInSubProcess`), the same approach as KOReader's Cover
+browser. The child writes thumbnails to disk and streams one result line per
+book over a pipe. The parent polls the pipe every 0.25 s, but only while a job
+runs. Result: RSS stayed within +6 MB across 81 extractions, and the UI no
+longer blocks while covers are extracted. Page change or closing the Library
+kills the child (and reaps it). Thumbnails are written to a `.tmp` file and
+renamed, so a killed child never leaves a half-written file.
 
 ## Transfer flow
 
 ```
 Send Book tapped
   provider:prepare()
-    NetworkMgr:isConnected()?           no → "Wi-Fi connection required" [Turn on Wi-Fi][Try Again]
-    Network.getLocalAddress()           none → "Unable to determine local network address"
+    NetworkMgr:isConnected()?             no → "Wi-Fi connection required" [Turn on Wi-Fi][Try Again]
+    Network.getLocalAddress()             none → "Unable to determine local network address"
   provider:start()
-    token = 16 bytes /dev/urandom (hex)  failure → "Unable to start transfer service"
-    Server:start() on 8080..8089         failure → "Unable to start transfer service"
-    iptables hole (Kindle only)
-    UIManager:insertZMQ(server)          ← polled only while registered
-    UIManager:scheduleIn(15 min, expire)
-    UIManager:preventStandby()
-  QR.newWidget("http://<ip>:<port>/<token>")  failure → "Unable to create transfer QR code"
+    library folder exists / writable?     no → "…could not be found" / "…is read-only"
+    token = 16 bytes /dev/urandom (hex)   failure → "Unable to start transfer service"
+    Server:start() on 8080..8089          failure → "Unable to start transfer service"
+    iptables hole (Kindle; exit status logged)
+    UIManager:insertZMQ(server)           ← polled only while registered
+    idle expiry timer (15 min)
+    SleepGuard.hold(): PluginShare.pause_auto_suspend = true,
+                       lipc preventScreenSaver 1 (Kindle), preventStandby()
+  QR "http://<ip>:<port>/<token>"         failure → "Unable to create transfer QR code"
 
-Phone: GET /<token>                    → upload page (404 for any other path/token)
-Phone: POST /<token>/upload?name=…     (raw file body, Content-Length)
-  sanitize name → supported extension? → length present? → ≤ max? → free space?
-  → open <dest>/.kindleui-upload-<rand>.part
-  → stream chunks (≤ 40 ms per main-loop tick) → progress in 10 % steps
-  → size == Content-Length? → magic bytes ok? → rename to unique final name
-  → 200 "Book sent successfully"
+Phone: GET /<token>                        → upload page (404 for anything else)
+Phone picks N books, then for each, in turn:
+  POST /<token>/upload?name=…&index=i&count=N   (raw file body, Content-Length)
+    sanitize name → supported? → length? → ≤ max? → free space?
+    → <dest>/.kindleui-upload-<rand>.part → stream (≤ 40 ms per main-loop tick)
+    → size == Content-Length? → magic bytes? → rename to a unique final name
+    → 200; the Kindle adds the book, refreshes the file browser, and starts
+      cover extraction for it in a child process
+    (a rejected book does not end the session: the phone moves on to the next)
+Phone: POST /<token>/finish
   nextTick: session:stop("done")
     removeZMQ, close listener + clients, remove iptables rule,
-    unschedule expiry, allowStandby, clear token
-  → FileManager:onRefresh(), "✓ Book received" [Read Now][Send Another][Done]
-
-Any failure mid-upload: temp file deleted, phone gets a message, Kindle shows
-it, and the session keeps waiting (same QR) until Cancel/expiry.
-Cancel / Done / Home / Back / Suspend / Exit / reader opening:
-TransferScreen:onCloseWidget (or the handler) → session:stop().
+    unschedule expiry, SleepGuard.release() (restores previous values,
+    restarts AutoSuspend's idle countdown), clear token
+  → "✓ N books received" [Read Now | Open Library] [Send More] [Done]
 ```
+
+- **Expiry is idle-based.** Every upload pushes it back, and it never fires
+  while a file is arriving: the check re-arms itself while receiving. When it
+  fires, the QR code is removed and the screen shows "This code has expired"
+  with **New Code**.
+- **Everything stops the server:** Cancel, Done, Back or Home key, sleep,
+  KOReader exit, or a book opening. They all go through
+  `TransferScreen:onCloseWidget` or its event handlers, and `session:stop()`.
+- **Crash or power loss mid-upload:** the next KOReader start deletes files
+  matching exactly `.kindleui-upload-<hex>.part` in the destination and home
+  folders, before any session can exist.
 
 ### Why the temp file is not in /tmp
 
-On Kindle, `/tmp` is a small RAM-backed tmpfs and `/mnt/us` is a separate
-VFAT filesystem. Renaming across them becomes a copy, which is slow, uses RAM
-and can fail half-way. A hidden `.part` file in the destination folder gives an
-atomic `rename()` and never appears in KOReader's browser, which hides dot-files.
+On Kindle, `/tmp` is a small RAM-backed tmpfs and `/mnt/us` is a separate VFAT
+filesystem. A rename across them is really a copy. A hidden `.part` file in the
+destination folder gives an atomic `rename()` and is hidden from KOReader's
+browser.
 
 ### Why a raw-body upload instead of multipart
 
-`XMLHttpRequest.send(file)` streams the file as the request body with a
-`Content-Length`, so the Kindle writes bytes straight to disk. There is no
-multipart boundary parsing and no buffering. The filename travels
-URL-encoded in the query string and is sanitised like any other untrusted
-input.
+`XMLHttpRequest.send(file)` streams each file as the request body with a
+`Content-Length`, so the Kindle writes straight to disk with no multipart
+parsing and no buffering. Several books are sent as several sequential
+requests.
 
-### Resource usage
+## Performance and resource usage
 
-- Home, Library, Plugins, Settings: static widgets with no timers, polling or
-  background work.
-- Send Book: one listening socket and up to 6 client sockets. KOReader's loop
-  wakes every 50 ms (its `ZMQ_TIMEOUT`) only while the server is registered.
-  Each tick spends at most 40 ms reading. Memory per upload is one 64 KiB
-  chunk.
-- Screen updates during upload happen in 10 % steps (at most ~10 e-ink
-  refreshes).
+Measured numbers are in [PERFORMANCE.md](PERFORMANCE.md).
+
+- Home, Library, Installed Plugins and Settings have no timers and no polling.
+  The only exceptions: the Library polls its extraction child every 0.25 s while
+  it works, and Home runs a one-off extraction for the current book's cover.
+- Send Book keeps one listening socket and at most 6 client sockets.
+  KOReader's loop wakes every 50 ms (`ZMQ_TIMEOUT`) only while the server is
+  registered. Each tick spends at most 40 ms reading, in 64 KiB chunks.
+- Installed Plugins runs no plugin code when it opens. A plugin's menu is built
+  when you tap it.
 
 ## Future: cloud transfer
 
-`transfer/provider.lua` is the seam. A future `cloudr2` provider would
-implement the same `prepare()` / `start(info, callbacks)` interface (for
-example a pairing code instead of a LAN URL). The UI already lists
-**Transfer method: Local Wi-Fi / Cloud (not available yet)**. The Cloud entry
-cannot be selected, and nothing in the local provider depends on it.
+`transfer/provider.lua` is the seam. A future provider implements the same
+`prepare()` / `start(info, callbacks)` interface. Nothing in the UI mentions it
+until it exists (the earlier greyed-out "Cloud" entry was removed).
