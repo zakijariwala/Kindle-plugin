@@ -1,6 +1,6 @@
 # Handoff — state of work
 
-Last updated: 2026-09-25. Branch: `claude/kindle-plugin-handoff-wndhwa` of `zakijariwala/Kindle-plugin` (not merged into `main` yet).
+Last updated: 2026-09-25. Branch: `claude/kindle-plugin-handoff-wndhwa` of `zakijariwala/Kindle-plugin`, proposed for `main` in a pull request. Installing on a Kindle: docs/INSTALL.md.
 
 ## Done (committed and pushed)
 

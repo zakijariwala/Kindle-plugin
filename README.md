@@ -36,6 +36,9 @@ account and no phone app are involved.
 
 ## Installation
 
+Step-by-step guide for a Kindle (download, copy over USB, first start,
+updating, troubleshooting): **[docs/INSTALL.md](docs/INSTALL.md)**. In short:
+
 1. Copy the `kindleui.koplugin` folder into KOReader's `plugins` folder:
    - Kindle: `/mnt/us/koreader/plugins/kindleui.koplugin`
    - Kobo: `/mnt/onboard/.adds/koreader/plugins/kindleui.koplugin`
@@ -212,6 +215,7 @@ build. Every KOReader API it uses is listed, with its source location, in
 
 ## Documentation
 
+- [docs/INSTALL.md](docs/INSTALL.md): installing on a Kindle, step by step.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): design, module map, the
   KOReader investigation (phase 1 report) and the transfer flow.
 - [docs/KOREADER_APIS.md](docs/KOREADER_APIS.md): every KOReader API used,
