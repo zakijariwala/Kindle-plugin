@@ -8,8 +8,9 @@ cover is extracted afterwards, *in a child process, only for the page on
 screen, only while this screen is open*, and swapped in place. Nothing keeps
 running once the Library is closed.
 
-Tap a cover to open the book; hold it for its KOReader book details.
-Swipe left/right (or the arrows) to turn pages.
+Tap a cover to open the book; hold it for the book menu (ui/bookmenu.lua).
+Swipe left/right (or the arrows) to turn pages. In selection mode
+(ui/selection.lua) a tap ticks a book instead, and ☰ acts on the selection.
 
 @module kindleui.ui.librarygrid
 ]]
@@ -32,6 +33,7 @@ local ImageWidget = require("ui/widget/imagewidget")
 local InfoMessage = require("ui/widget/infomessage")
 local Library = require("kindleui/ui/library")
 local Perf = require("kindleui/util/perf")
+local Selection = require("kindleui/ui/selection")
 local Size = require("ui/size")
 local TextBoxWidget = require("ui/widget/textboxwidget")
 local TextWidget = require("ui/widget/textwidget")
@@ -64,7 +66,7 @@ function LibraryGrid:init()
     end
     self.tiles = {}
     self:computeLayout()
-    self.books, self.total_books, self.all_books = Library.loadBooks(self.plugin)
+    self.books, self.total_books, self.all_books = Library.loadBooks(self.plugin, { no_group = self.selecting })
     -- Come back to the page you were on (for this KOReader session).
     self.page = math.max(1, math.min(Library.session.grid_page or 1, self:pageCount()))
     self:buildPage()
@@ -88,7 +90,13 @@ function LibraryGrid:computeLayout()
         subtitle = " ", -- a subtitle widget must exist for setSubTitle() to work
         with_bottom_line = true,
         left_icon = "appbar.menu",
-        left_icon_tap_callback = function() Library.showOptions(self, self.plugin) end,
+        left_icon_tap_callback = function()
+            if self.selecting then
+                Selection.showActions(self, self.plugin)
+            else
+                Library.showOptions(self, self.plugin)
+            end
+        end,
         close_callback = function() self:onClose() end,
         show_parent = self,
     }
@@ -132,19 +140,73 @@ function LibraryGrid:tileContent(book)
     else
         cover = self:textCover(book)
     end
+    if self.selecting then
+        -- A thick frame marks selected covers (same size either way).
+        local edge = Size.border.thick * 2
+        local selected = self.selection:has(book.path)
+        cover = FrameContainer:new{
+            bordersize = selected and edge or 0,
+            padding = selected and 0 or edge,
+            margin = 0,
+            cover,
+        }
+    end
     return VerticalGroup:new{
         align = "center",
         CenterContainer:new{ dimen = Geom:new{ w = self.tile_w, h = self.cover_h }, cover },
         CenterContainer:new{
             dimen = Geom:new{ w = self.tile_w, h = self.label_h },
             TextWidget:new{
-                text = Library.progressText(book),
+                text = self:labelText(book),
                 face = self.label_face,
                 max_width = self.tile_w,
-                fgcolor = Blitbuffer.COLOR_DARK_GRAY,
+                bold = self.selecting and self.selection:has(book.path),
+                fgcolor = self.selecting and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_DARK_GRAY,
             },
         },
     }
+end
+
+-- "63%", or "☑ 63%" / "☐ 63%" while selecting; "5 books" for a series.
+function LibraryGrid:labelText(book)
+    if book.is_series then return T(_("▸ %1 books"), book.count) end
+    local text = Library.progressText(book)
+    if not self.selecting then return text end
+    return (self.selection:has(book.path) and "☑ " or "☐ ") .. text
+end
+
+-- Selection mode --------------------------------------------------------------
+
+function LibraryGrid:setSelecting(on, first_path)
+    self.selecting = on and true or nil
+    self.selection = on and Selection.new() or nil
+    if on and first_path then self.selection:toggle(first_path) end
+    self:reload() -- series groups are shown as books while selecting
+end
+
+function LibraryGrid:refreshSelection()
+    self:buildPage()
+    UIManager:setDirty(self, "ui")
+end
+
+function LibraryGrid:pageBooks()
+    local out = {}
+    local first = (self.page - 1) * self.per_page + 1
+    for i = first, math.min(first + self.per_page - 1, #self.books) do
+        table.insert(out, self.books[i])
+    end
+    return out
+end
+
+function LibraryGrid:onTile(book)
+    if book.is_series then
+        Library.openSeries(self, book.series)
+    elseif self.selecting then
+        self.selection:toggle(book.path)
+        self:refreshSelection()
+    else
+        self:openBook(book)
+    end
 end
 
 function LibraryGrid:freeImages()
@@ -179,8 +241,10 @@ function LibraryGrid:buildPage()
             if not book then break end
             if c > 1 then table.insert(row, HorizontalSpan:new{ width = self.gap }) end
             local tile = Common.Tappable:new{
-                callback = function() self:openBook(book) end,
-                hold_callback = function() self:showDetails(book) end,
+                callback = function() self:onTile(book) end,
+                hold_callback = function()
+                    if self.selecting or book.is_series then self:onTile(book) else self:showDetails(book) end
+                end,
                 self:tileContent(book),
             }
             tile.book = book
@@ -244,7 +308,9 @@ function LibraryGrid:buildPage()
             },
         },
     }
-    self.title_bar:setSubTitle(Library.subtitle(#self.books, self.total_books))
+    self.title_bar:setSubTitle(self.selecting
+        and (self.selection:label() .. " · " .. _("☰ for actions"))
+        or Library.subtitle(self.books, self.total_books))
     self:moveFocusTo(1, 1, FocusManager.FOCUS_ONLY_ON_NT)
     -- Start after this page has been painted.
     UIManager:nextTick(function()
@@ -259,8 +325,10 @@ function LibraryGrid:refreshTileFor(path)
     for __, tile in ipairs(self.tiles) do
         local book = tile.book
         if book.path == path then
-            book.title = book.entry.title or book.title
-            book.authors = book.entry.authors or book.authors
+            if not book.is_series then -- a group keeps its series name
+                book.title = book.entry.title or book.title
+                book.authors = book.entry.authors or book.authors
+            end
             -- Swap the tile's content in place and refresh just that tile.
             tile[1] = self:tileContent(book)
             UIManager:setDirty(self, function() return "ui", tile.dimen end)
@@ -316,7 +384,7 @@ function LibraryGrid:prepareAll()
             Perf.log("prepare all covers (child process)", t0, { books = job.done })
             self.extract_job = nil
             self.preparing = nil
-            self.title_bar:setSubTitle(Library.subtitle(#self.books, self.total_books))
+            self.title_bar:setSubTitle(Library.subtitle(self.books, self.total_books))
             UIManager:show(InfoMessage:new{ text = T(_("Covers ready for %1 books."), job.done), timeout = 3 })
         end,
     })
@@ -339,14 +407,20 @@ function LibraryGrid:openBook(book)
 end
 
 function LibraryGrid:showDetails(book)
-    local ui = self.plugin and self.plugin.ui
-    if ui and ui.bookinfo then
-        ui.bookinfo:show(book.path)
-    end
+    require("kindleui/ui/bookmenu").show{
+        plugin = self.plugin,
+        path = book.path,
+        title = book.title,
+        on_change = function()
+            if UIManager:isWidgetShown(self) then self:reload() end
+        end,
+        on_select = function() self:setSelecting(true, book.path) end,
+    }
 end
 
 function LibraryGrid:reload()
-    self.books, self.total_books, self.all_books = Library.loadBooks(self.plugin)
+    self.books, self.total_books, self.all_books = Library.loadBooks(self.plugin, { no_group = self.selecting })
+    if self.selection then self.selection:keepOnly(self.books) end
     self.page = math.min(self.page, self:pageCount())
     self:buildPage()
     UIManager:setDirty(self, "partial")
@@ -394,6 +468,11 @@ function LibraryGrid:onShow()
 end
 
 function LibraryGrid:onClose()
+    if self.selecting then -- ✕ / Back first leaves selection mode
+        self:setSelecting(false)
+        return true
+    end
+    if Library.leaveSeries(self) then return true end -- then a series
     UIManager:close(self)
     return true
 end

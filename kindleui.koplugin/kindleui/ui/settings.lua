@@ -6,7 +6,8 @@ Simplified Settings.
       Library       – sort order, Home screen at startup, refresh
       Device        – frontlight, sleep screen, rotation (KOReader's own items)
       Connectivity  – Send Book, Wi-Fi (KOReader's own)
-      Advanced      – Open KOReader Settings / all menus, plugin management
+      Advanced      – Open KOReader Settings / all menus, plugin management,
+                      install a plugin from the phone (and undo it)
       About
 
 Wherever possible the entries *are* KOReader's menu entries, taken from the
@@ -97,6 +98,24 @@ function Settings.build(plugin)
             sub_item_table = sort_items,
         },
         {
+            text = _("Show time left on Home"),
+            help_text = _("Estimated reading time left in the current book, from the Statistics plugin (average time per page so far). Shown only when Statistics is enabled and has data for the book."),
+            checked_func = function() return Config.get("home_time_left") ~= false end,
+            callback = function()
+                Config.set("home_time_left", Config.get("home_time_left") == false)
+                plugin:onLibraryChanged()
+            end,
+        },
+        {
+            text = _("Show other books being read on Home"),
+            help_text = _("Up to two more books from your reading history, under Continue Reading. Finished books are left out."),
+            checked_func = function() return Config.get("home_more_reading") ~= false end,
+            callback = function()
+                Config.set("home_more_reading", Config.get("home_more_reading") == false)
+                plugin:onLibraryChanged()
+            end,
+        },
+        {
             text = _("Show \"Recently added\" on Home"),
             checked_func = function() return Config.get("home_recent") ~= false end,
             callback = function()
@@ -165,6 +184,26 @@ function Settings.build(plugin)
         },
     }
     addIf(advanced, ko("plugin_management"))
+    table.insert(advanced, {
+        text = _("Install plugin from phone"),
+        help_text = _("Send a KOReader plugin (.zip) from your phone over local Wi-Fi, the same way as Send Book. You confirm before anything is installed."),
+        callback = function(touchmenu_instance)
+            if touchmenu_instance then touchmenu_instance:closeMenu() end
+            plugin:showPluginTransfer()
+        end,
+    })
+    table.insert(advanced, {
+        text_func = function()
+            local record = require("kindleui/util/plugininstaller").lastInstall()
+            return record and T(_("Undo last plugin install (%1)"), record.name) or _("Undo last plugin install")
+        end,
+        help_text = _("Restores the version the last install replaced, or removes the plugin if it was new. KOReader then restarts."),
+        enabled_func = function() return require("kindleui/util/plugininstaller").canUndo() end,
+        callback = function(touchmenu_instance)
+            if touchmenu_instance then touchmenu_instance:closeMenu() end
+            require("kindleui/ui/plugininstall").confirmUndo()
+        end,
+    })
 
     -- About -------------------------------------------------------------------
     local about = {

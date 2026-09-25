@@ -24,8 +24,12 @@ KOREADER_BASE=/path/to/koreader/base ./tests/run.sh   # also encodes the QR with
 | gettext shadowing | no `for _, …` / `local _,` in files that use `_()` (such a loop would crash any translated string inside it) |
 | luacheck | undefined globals, unused variables, typos |
 | `test_security.lua` | Tokens: randomness, format, uniqueness, and the RNG fails closed. Constant-time compare. Filename sanitizer: spaces, Unicode, traversal, absolute paths, NUL, invalid UTF-8, overlong, surrogates, VFAT characters, hidden names, length cap. Safe joins. Duplicate-name suffixes. **Stale temp cleanup** removes exactly our pattern and leaves everything else (including a directory with that name). Format sniffing. IP selection. |
-| `test_transfer.lua` | A real LuaSocket server with curl as the phone. Upload page served. Invalid, truncated or missing token rejected. Traversal, absolute and NUL names rejected. Unsupported type → 415. Chunked upload without a length → 411. Oversize → 413. Wrong method → 405. Fake EPUB rejected after upload (422) with nothing left behind. Interrupted upload: temp file exists during, is removed after, and the UI is told "cancelled". Unicode + spaces EPUB stored byte-identical. Progress events carry book *i of N*. Session stays open until `/finish`, then stops (server unregistered, token cleared, port closed). **Several books in one session**, with one rejected in the middle. Old token rejected by a new session. Duplicate name → "(2)". PDF with `Expect: 100-continue`. Cancel: port closed, timer removed, idempotent. Idle expiry. **No expiry while a slow upload is arriving**, then expiry once idle. Disk full → 507. Read-only folder (skipped when run as root). No `.part` leftovers. |
+| `test_transfer.lua` | A real LuaSocket server with curl as the phone. Upload page served. Invalid, truncated or missing token rejected. Traversal, absolute and NUL names rejected. Unsupported type → 415. Chunked upload without a length → 411. Oversize → 413. Wrong method → 405. Fake EPUB rejected after upload (422) with nothing left behind. Interrupted upload: temp file exists during, is removed after, and the UI is told "cancelled". Unicode + spaces EPUB stored byte-identical. Progress events carry book *i of N*. Session stays open until `/finish`, then stops (server unregistered, token cleared, port closed). **Several books in one session**, with one rejected in the middle. Old token rejected by a new session. Duplicate name → "(2)". PDF with `Expect: 100-continue`. **Send into a collection**: picker shown with escaped names and positional values, the chosen collection reaches the UI, unknown or non-numeric values ignored. Cancel: port closed, timer removed, idempotent. Idle expiry. **No expiry while a slow upload is arriving**, then expiry once idle. Disk full → 507. Read-only folder (skipped when run as root). **Plugin mode**: plugin wording, one file only, a book → 415 and a fake `.zip` → 422 with plugin messages, the zip lands in the incoming folder, a second file → 409. No `.part` leftovers. |
 | `test_updater.lua` | Certificate host-name matching (exact, case, wildcard rules, suffix attacks), SAN/CN extraction, archive entry filtering (only `kindleui.koplugin/`, no traversal), staging paths are hidden and never `*.koplugin`, validation catches syntax errors and missing files, folder swap, rollback when the swap fails |
+| `test_pluginzip.lua` | Plugin folder found at any depth, GitHub `-main` folders, `<name>.koplugin.zip` roots, several plugins; junk skipped; `..`/absolute/backslash paths, links, size and file-count limits refused; `_meta.lua` fields read as text (all quote styles, gettext); built-in list parsed from `pluginloader.lua` |
+| `test_plugininstaller.lua` | With a fake archive reader (which, like KOReader's, only extracts entries it has iterated) in real temp folders: analysis (name, description, new/replace), install of a new plugin (junk and files outside the plugin not written, no staging left), **replace keeps the previous version as `.undo`**, Undo restores it, Undo removes a newly added plugin, only one level of Undo, a later install drops the older `.undo`, built-in / this plugin / syntax error / traversal / link refused with nothing changed, stale `.undo`/`.old` do not block a replace, startup cleanup of orphan `.undo` folders and of the incoming folder |
+| `test_series.lua` | Series members in reading order (index, then title, fractional index), grouping keeps the sort position of the first book, groups show volume 1, a series of one book is not grouped, book count through groups |
+| `test_readingtime.lua` | Time-left estimate: pages left × average time per page, no estimate below 5 pages read, when finished, without a page count or statistics row; values stored as text |
 | `test_qr.lua` | URL format and length, QR encodes with KOReader's `ffi/qrencode` (≤ version 5), multi-file picker, page escaping, no external resources, CSP |
 
 ## 2. Emulator (real KOReader, scripted)
@@ -39,12 +43,55 @@ tests/e2e/smoke.sh
 An emulator-only KOReader patch (`tests/e2e/patches/2-kindleui-smoke.lua`)
 drives the plugin through its own functions:
 - leaving a book → Home;
-- Library grid: page turns, filter, search, Prepare all covers, options;
-- list view and sorting;
+- Library grid: page turns, filter, search, collection filter (a collection
+  made by the patch, the chooser, the subtitle, and a deleted collection
+  falling back to all books), Prepare all covers, options,
+  the hold menu, and deleting a book through it (file, cache entry and tile
+  gone);
+- series grouping (books 4–6 of the synthetic library form "Smoke Saga"): the
+  group, its count and cover, opening it in reading order, leaving it;
+- selection mode: from the book menu, toggling, select page, batch delete of
+  two books (files gone), leaving it with close; in the list view too;
+- list view and sorting, and its hold menu;
 - Installed Plugins: opening a plugin's menu, pinning;
-- Home refresh with pinned plugins and Recently added, at all three text sizes;
+- Home refresh with pinned plugins and Recently added, at all three text sizes,
+  each time checking that Home fits the screen (the log shows which optional
+  parts were kept);
+- other books being read on Home (reading history filled by the patch), in
+  history order, and switched off; marking one Finished from its hold menu
+  (it leaves the rows); removing the Continue Reading book from the history;
+- time left on the Continue Reading card, from a Statistics row the patch
+  writes (and hidden when switched off);
+- quick settings: night mode toggled on and off through the panel, the panel
+  opened by a swipe, and (with the device's light/Wi-Fi/sleep flags forced on,
+  since the emulator runs KOReader as a desktop) the full five-entry panel;
 - Settings;
-- Send Book, including New Code.
+- Send Book, including New Code;
+- Send Plugin, and Undo with nothing to undo;
+- rotating the screen and back: Home follows (size, portrait or two-column
+  landscape layout) and still fits.
+
+The whole run also passes on a landscape screen:
+`KO_W=1680 KO_H=1264 tests/e2e/smoke.sh`.
+
+**Plugin install** (run after installer changes):
+
+```sh
+tests/e2e/plugininstall.sh
+```
+
+Uses a writable plugins folder and its own patch
+(`tests/e2e/plugininstall/`). It builds a GitHub-style "Download ZIP" of a
+tiny `greeter.koplugin` (with `.git/`, `.github/`, `.DS_Store` and
+`__MACOSX/` junk), sends it to the Send Plugin screen with curl like the
+phone page does, checks the confirm text, confirms, and checks the files (no
+junk, README kept) and the restart prompt. After a restart the log must show
+`GREETER LOADED v1`. It then sends v2 (confirm says "replaces", `.undo`
+kept), restarts (v2 loaded), runs Undo, restarts (v1 loaded, no `.undo`,
+`.new` or `.old` left), then removes it through Installed Plugins' selection
+mode (confirm text, restart prompt, folder gone, not loaded after a restart),
+and fails on any Lua error in the log. Screenshots of
+both confirm screens are left in `/tmp/kindleui-pi-e2e/`.
 
 It fails on any failed step or any plugin Lua error in the log, including
 errors that only happen while drawing. It is layout-independent (no screen

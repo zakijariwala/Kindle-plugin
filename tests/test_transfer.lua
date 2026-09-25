@@ -292,6 +292,64 @@ do
     os.execute('chmod 755 "' .. ro .. '"')
 end
 
+T.section("send into a collection")
+do
+    local d = T.tmpdir()
+    local ev_coll = {}
+    local s10, sched10 = newSession(d, {
+        collections = { { name = "favorites", title = "Favorites" }, { name = "Sci-fi <b>", title = "Sci-fi <b>" } },
+    })
+    s10.callbacks.onReceived = function(path, name, index, count, coll) table.insert(ev_coll, coll or "none") end
+    T.ok(s10:start(), "session starts")
+    local b10, p10 = "http://127.0.0.1:" .. s10.port, s10:getPath()
+    local c10, page10 = curl(sched10, b10 .. p10)
+    T.eq(c10, 200, "page served")
+    T.ok(page10:find('<select id="coll">', 1, true), "collection picker shown")
+    T.ok(page10:find('<option value="2">Sci-fi &lt;b&gt;</option>', 1, true), "collection names escaped, values are positions")
+    T.ok(not page10:find("Sci-fi <b>", 1, true), "no raw name in the page")
+    curl(sched10, string.format("-X POST --data-binary @%s '%s%s/upload?name=a.pdf&collection=2'", pdf, b10, p10))
+    curl(sched10, string.format("-X POST --data-binary @%s '%s%s/upload?name=b.pdf&collection=9'", pdf, b10, p10))
+    curl(sched10, string.format("-X POST --data-binary @%s '%s%s/upload?name=c.pdf'", pdf, b10, p10))
+    curl(sched10, string.format("-X POST --data-binary @%s '%s%s/upload?name=d.pdf&collection=favorites'", pdf, b10, p10))
+    T.eq(table.concat(ev_coll, ","), "Sci-fi <b>,none,none,none", "chosen collection passed on; unknown or non-numeric ignored")
+    s10:stop("cancelled")
+end
+
+T.section("plugin mode: one .zip, plugin wording")
+do
+    local inc = T.tmpdir()
+    local zip = makeFile(src, "greeter.koplugin.zip", "PK\3\4" .. string.rep("p", 2048))
+    local not_zip = makeFile(src, "fake.zip", "not a zip at all")
+    local s9, sched9, ev9 = newSession(inc, {
+        kind = "plugin",
+        max_files = 1,
+        is_supported = function(n) return n:lower():match("%.zip$") ~= nil end,
+    })
+    T.ok(s9:start(), "plugin session starts")
+    local b9, p9 = "http://127.0.0.1:" .. s9.port, s9:getPath()
+    local c9, page9 = curl(sched9, b9 .. p9)
+    T.eq(c9, 200, "page served")
+    T.ok(page9:find("SEND PLUGIN", 1, true) and page9:find("Choose plugin .zip", 1, true), "plugin wording")
+    T.ok(not page9:find('type="file" multiple', 1, true), "one file only")
+    T.ok(not page9:find('id="coll"', 1, true), "no collection picker for plugins")
+    local c, msg = curl(sched9, string.format("-X POST --data-binary @%s '%s%s/upload?name=book.epub'", epub, b9, p9))
+    T.eq(c, 415, "a book is refused")
+    T.eq(msg, Session.PLUGIN_MSG.unsupported, "with the plugin message")
+    c, msg = curl(sched9, string.format("-X POST --data-binary @%s '%s%s/upload?name=fake.zip'", not_zip, b9, p9))
+    T.eq(c, 422, "a .zip that is not a zip is refused")
+    T.eq(msg, Session.PLUGIN_MSG.corrupt, "with the plugin message")
+    c = curl(sched9, string.format("-X POST --data-binary @%s '%s%s/upload?name=greeter.koplugin.zip'", zip, b9, p9))
+    T.eq(c, 200, "plugin zip received")
+    T.eq(ev9.received[1], inc .. "/greeter.koplugin.zip", "stored in the incoming folder")
+    c, msg = curl(sched9, string.format("-X POST --data-binary @%s '%s%s/upload?name=again.zip'", zip, b9, p9))
+    T.eq(c, 409, "a second file is refused")
+    T.eq(msg, Session.PLUGIN_MSG.one_only, "one plugin at a time")
+    c, msg = curl(sched9, string.format("-X POST '%s%s/finish'", b9, p9))
+    T.eq(c, 200, "finish")
+    T.eq(msg, Session.PLUGIN_MSG.done, "phone told to confirm on the Kindle")
+    T.eq(ev9.finished[1] and #ev9.finished[1], 1, "one file reported at finish")
+end
+
 T.section("no leftovers")
 local leftovers = 0
 for _, n in ipairs(T.listDir(dest)) do if n:match("%.part$") then leftovers = leftovers + 1 end end

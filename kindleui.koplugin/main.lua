@@ -21,6 +21,7 @@ local InfoMessage = require("ui/widget/infomessage")
 local UIManager = require("ui/uimanager")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local logger = require("logger")
+local Screen = require("device").screen
 local _ = require("gettext")
 
 local Books = require("kindleui/util/books")
@@ -87,6 +88,14 @@ function KindleUI:init()
                     logger.info("KindleUI: update leftovers removed", res.removed, "restored", res.restored)
                 end
             end
+            -- ...a plugin .zip received but never installed, and .undo copies
+            -- that "Undo last plugin install" no longer points to.
+            local ok, err = pcall(function()
+                local Installer = require("kindleui/util/plugininstaller")
+                Installer.clearIncoming()
+                Installer.cleanupUndo(Installer.userPluginsDir(), Config.get("last_plugin_install"))
+            end)
+            if not ok then logger.warn("KindleUI: plugin install cleanup failed:", err) end
         end)
     end
 
@@ -166,6 +175,17 @@ function KindleUI:onChildClosed()
     end
 end
 
+-- KOReader rebuilt the file browser for a new screen size (rotation).
+function KindleUI:onSetDimensions()
+    local home = shell.home
+    if home and UIManager:isWidgetShown(home)
+            and (home.dimen.w ~= Screen:getWidth() or home.dimen.h ~= Screen:getHeight()) then
+        UIManager:nextTick(function()
+            if UIManager:isWidgetShown(home) then home:onScreenResize() end
+        end)
+    end
+end
+
 function KindleUI:onLibraryChanged()
     shell.home_dirty = true
 end
@@ -194,6 +214,12 @@ end
 function KindleUI:showTransfer()
     local TransferScreen = require("kindleui/ui/transfer")
     UIManager:show(TransferScreen:new{ plugin = self })
+end
+
+--- "Install plugin from phone": the Send Book screen, receiving one plugin .zip.
+function KindleUI:showPluginTransfer()
+    local TransferScreen = require("kindleui/ui/transfer")
+    UIManager:show(TransferScreen:new{ plugin = self, kind = "plugin" })
 end
 
 --- Opens a book through KOReader's normal reader.

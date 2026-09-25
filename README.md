@@ -5,8 +5,11 @@ shell on top of KOReader:
 
 ```
 Home
- ├── Continue Reading   (cover · title · author · progress → opens the book)
- ├── My Library         (cover grid like a Kindle, or a list; sort, refresh)
+ ├── Continue Reading   (cover · title · author · progress → opens the book,
+ │                       plus up to two more books you are reading)
+ ├── My Library         (cover grid like a Kindle, or a list; sort, filter,
+ │                       search, KOReader collections; hold a book: status,
+ │                       reset, collections, remove, details, delete)
  ├── + Send Book        (phone → Kindle over the phone's hotspot, via QR code;
  │                       several books at once)
  ├── Installed Plugins  (every KOReader plugin, with its own menu)
@@ -32,6 +35,9 @@ account and no phone app are involved.
 > [Compatibility](#compatibility) and [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 
 ## Installation
+
+Step-by-step guide for a Kindle (download, copy over USB, first start,
+updating, troubleshooting): **[docs/INSTALL.md](docs/INSTALL.md)**. In short:
 
 1. Copy the `kindleui.koplugin` folder into KOReader's `plugins` folder:
    - Kindle: `/mnt/us/koreader/plugins/kindleui.koplugin`
@@ -69,7 +75,8 @@ management**. To uninstall, delete the folder.
 3. Tap **+ Send Book**. A QR code and the Kindle's local address appear.
 4. Scan the QR code with the same phone. The browser opens *Send to Kindle*.
 5. Tap **Choose Books**, pick one or several EPUB/PDF/… files, tap **Upload**.
-   The phone shows each book's result.
+   The phone shows each book's result. If you use KOReader collections, you
+   can pick one under **Add to collection** first.
 6. The Kindle shows **✓ Book received** (or *N books received*) with **Read
    Now** / **Open Library**, **Send More** and **Done**. The books are already
    in the library, with their covers, and the transfer service has shut down.
@@ -112,6 +119,28 @@ Plain HTTP on a local link is used (there is no way to get a trusted TLS
 certificate for a hotspot IP). Anyone on the same hotspot who can see the QR
 code/URL could upload a book during the session; keep the hotspot private.
 
+## Installing other plugins from the phone
+
+**Settings → Advanced → Install plugin from phone** (or the row of that name at the end of
+**Installed Plugins**) shows the same kind of QR code as Send Book. On the
+phone, choose a plugin's `.zip`, for example GitHub → Code → **Download ZIP**,
+or a release asset (up to 20 MB). The Kindle finds the `*.koplugin` folder
+inside it and shows its name and description, and whether it is new or
+replaces an installed version. Nothing is installed until you tap
+**Install** / **Replace**; then restart KOReader.
+
+- Only the plugin folder is unpacked: README files, tests, `.git` and macOS
+  `__MACOSX` junk around it are never written. Zips with `..` or absolute
+  paths, symbolic links, more than 50 MB unpacked or 5 000 files are refused.
+- The new files are checked to compile before anything is replaced. If
+  anything fails, the installed plugins are unchanged.
+- KOReader's built-in plugins cannot be replaced, and this plugin updates
+  itself through **Check for updates** instead.
+- **Settings → Advanced → Undo last plugin install** puts back the version the
+  last install replaced, or removes the plugin if it was new (one level only).
+- A plugin runs with full access to KOReader and your files: only install
+  plugins you trust.
+
 ## Troubleshooting (phone hotspot)
 
 | Symptom | What to check |
@@ -150,7 +179,8 @@ build. Every KOReader API it uses is listed, with its source location, in
   Home, the cover grid, Installed Plugins, Settings → Advanced, and Send Book
   end to end (QR decoded from the screen, then headless Chromium uploading
   EPUB + PDF + an unsupported file). It also covers the read-only folder,
-  expiry and stale-file cases. Details: [docs/TESTING.md](docs/TESTING.md).
+  expiry and stale-file cases, and installing a plugin from a GitHub-style
+  zip, replacing it and undoing that, across restarts. Details: [docs/TESTING.md](docs/TESTING.md).
 - Timings and memory in that emulator: [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 
 **What has not been tested:**
@@ -160,6 +190,8 @@ build. Every KOReader API it uses is listed, with its source location, in
   their result is logged.
 - Real phone browsers (iOS Safari, Android Chrome) over a real hotspot.
 - Non-touch Kindles (key navigation is implemented but untested).
+- Installing a plugin on a real Kindle (the user plugins folder there is
+  `koreader/plugins`, next to the built-in ones).
 
 **Assumptions / known limitations:**
 - Needs a KOReader recent enough to have `UIManager:insertZMQ`,
@@ -183,6 +215,7 @@ build. Every KOReader API it uses is listed, with its source location, in
 
 ## Documentation
 
+- [docs/INSTALL.md](docs/INSTALL.md): installing on a Kindle, step by step.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): design, module map, the
   KOReader investigation (phase 1 report) and the transfer flow.
 - [docs/KOREADER_APIS.md](docs/KOREADER_APIS.md): every KOReader API used,

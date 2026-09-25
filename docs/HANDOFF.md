@@ -1,6 +1,6 @@
 # Handoff — state of work
 
-Last updated: 2026-09-25. Branch: `main` of `zakijariwala/Kindle-plugin`.
+Last updated: 2026-09-25. Branch: `claude/kindle-plugin-handoff-wndhwa` of `zakijariwala/Kindle-plugin`, proposed for `main` in a pull request. Installing on a Kindle: docs/INSTALL.md.
 
 ## Done (committed and pushed)
 
@@ -31,61 +31,86 @@ Last updated: 2026-09-25. Branch: `main` of `zakijariwala/Kindle-plugin`.
   - idle expiry;
   - a read-only folder is refused before the upload starts.
 - Self-updater: GitHub → zip → staging → compile check → swap, with its own TLS peer verification.
-- Unit tests: `tests/run.sh`, all passing.
-- Emulator smoke test: `tests/e2e/smoke.sh`, 31 steps, passing.
-- **Plugin installer, part 1/4:** `kindleui/util/pluginzip.lua` (pure zip analysis) plus 31 tests.
+- Unit tests: `tests/run.sh`, all passing (including `test_plugininstaller.lua`).
+- Emulator smoke test: `tests/e2e/smoke.sh`, 58 steps, passing.
+- **Install plugin from phone (ROADMAP #21):**
+  - `util/pluginzip.lua` (pure zip analysis) and `util/plugininstaller.lua`
+    (stage → compile check → swap; a replaced version is kept as
+    `.<name>.koplugin.undo`; Undo; startup cleanup);
+  - plugin mode of Send Book (`kind = "plugin"`: one `.zip`, ≤ 20 MB, saved to
+    `<settings>/kindleui-incoming/`, its own phone page wording and messages);
+  - `ui/plugininstall.lua`: pick one plugin when a zip has several, confirm,
+    install, restart prompt; Undo confirm;
+  - entry points: Settings → Advanced ("Install plugin from phone", "Undo last
+    plugin install") and a row at the end of Installed Plugins;
+  - emulator end-to-end: `tests/e2e/plugininstall.sh` (GitHub-style zip with
+    junk → install → restart → loaded; replace → restart; Undo → restart),
+    passing;
+  - a bug the e2e caught: KOReader's `Archiver.Reader` can only extract
+    entries it has already iterated over, so `install()` iterates the zip
+    once first. The unit-test fake now behaves the same way.
 
-## In progress: Install plugin from phone (ROADMAP #21)
+- **Other books being read on Home (ROADMAP #12):** up to two rows (title
+  and %) under the Continue Reading card, from KOReader's reading history,
+  finished books left out; Settings → Library toggle `home_more_reading`.
+  Home now fits itself to the screen (`Home.FIT_LEVELS`): compact spacing
+  first, then fewer optional parts. Before this, Home at large text with
+  pinned plugins was taller than the screen (Settings cut off); the smoke
+  test now checks the fit at every text size.
 
-`kindleui/util/plugininstaller.lua` is committed as **WIP**. Nothing loads it yet, and it is not tested. It already has:
+- **Hold menu on a book (ROADMAP #13):** `ui/bookmenu.lua`, from the Library
+  grid and list and from every book on Home. KOReader's own status row
+  (Reading / On hold / Finished), Reset (labelled "mark as unread"), Remove
+  from Continue Reading (moves `lastfile` to the next history book), Book
+  details, Delete (KOReader's dialog; the cache entry and thumbnail go too).
 
-- `userPluginsDir`, `incomingDir`, `clearIncoming`, `builtins`;
-- `analyze(zip, name)`;
-- `install(zip, analysis, candidate)`: stage `.X.new`, then `loadfile` check, then swap.
+- **Collections (ROADMAP #14):** Library ☰ → "Collection: …" filters by one
+  of KOReader's collections (`library_collection`); the hold menu has
+  KOReader's own "Collections…" chooser, saved to `collection.lua` straight
+  away (KOReader writes it only when its file browser closes). Checked with
+  real taps in the emulator.
 
-To finish:
+- **Multi-select (ROADMAP #15):** `ui/selection.lua` for the Library grid and
+  list (☰ → Select books…, or hold → Select…): KOReader's batch status, Reset
+  and Collections buttons, and Delete through `FileManager:deleteFile`.
+  Installed Plugins: hold → Select plugins to remove… (user plugins only), one
+  restart. Note: `Menu`/`FocusManager` use `self.selected` for key focus;
+  don't name widget fields `selected`.
 
-1. **Fix the replace branch in `install()`.** It currently calls `Updater.swapIn`, which deletes the old version. Replace that call with:
-   1. purge `.X.undo`;
-   2. `os.rename(target, old)`;
-   3. `os.rename(staged, target)`, putting `old` back if this fails;
-   4. `os.rename(old, undo)`.
-2. **Add `Installer.undo()` and `Installer.canUndo()`.**
-   - Record Config `last_plugin_install = {name, had_previous}`.
-   - Undo either restores `.X.undo` or removes the newly added plugin, then asks for a restart.
-   - `Updater.cleanupLeftovers` only handles `.new`/`.old`; keep it away from `.undo`.
-3. **Add a plugin mode to Send Book** (session, server, upload page, `ui/transfer.lua`):
-   - one `.zip`, max 20 MB, saved to `incomingDir()`;
-   - page title "Send plugin", `multiple = false`.
-   - On receive:
-     - run `analyze`;
-     - if there are several candidates, let the user pick one;
-     - refuse built-in plugins;
-     - show a confirm screen with the name, description, "new" or "replaces", a full-access warning and a "disabled" note;
-     - Install, then the restart prompt.
-4. **Entry points:**
-   - Settings → Advanced: "Install plugin from phone" and "Undo last plugin install";
-   - a row in Installed Plugins.
-5. **Startup:** call `Installer.clearIncoming()` in `main.lua`, next to the stale-upload cleanup.
-6. **Tests:**
-   - unit tests where the code is pure;
-   - emulator end-to-end: upload a GitHub-layout zip that contains junk files, install it, restart, check the plugin appears, then test Undo;
-   - extend `tests/e2e/patches/2-kindleui-smoke.lua`.
-7. **Docs:** update README, ARCHITECTURE and ROADMAP.
+- **Series grouping (ROADMAP #16):** `util/series.lua` (pure, tested);
+  cache entries carry `series`/`series_index` (per-entry `meta = 2`, older
+  entries upgraded lazily); Library ☰ → Group series. Also checked in the
+  emulator: series extracted from never-opened EPUBs (calibre:series), and
+  the upgrade of a cache without series.
 
-## Next, in ranked order (see docs/ROADMAP.md)
+- **Quick settings (ROADMAP #17):** `ui/quicksettings.lua`, from Home (swipe
+  down, or tap the status line ▾): KOReader's own events. The emulator image
+  runs KOReader as a desktop (`KO_MULTIUSER`), so only Night mode is live
+  there; frontlight, Wi-Fi and sleep need a device check.
 
-- #12 last 2–3 reading books on Home
-- #13 cover hold menu
-- #14 collections
-- #15 multi-select batch actions (delete, and so on)
-- #16 series
-- #17 quick settings
-- #18 time left
-- #19 send into collection
-- #20 landscape Home
+- **Time left (ROADMAP #18):** `util/readingtime.lua` reads the book's row
+  from `statistics.sqlite3` (by partial MD5, read-only), estimate tested in
+  `test_readingtime.lua`; Settings → Library toggle `home_time_left`.
 
-Housekeeping: in the ROADMAP table, mark #9 (Recently added), #10 (e-ink refresh) and #11 (Prepare covers) as done.
+- **Send into a collection (ROADMAP #19):** phone page "Add to collection"
+  (positions, not names, go back to the Kindle); `ui/transfer.lua` adds each
+  book with `ReadCollection:addItem` and writes at once. Checked end to end
+  with headless Chromium (`COLLECTION="To read" node tests/e2e/phone.js …`).
+
+- **Landscape Home (ROADMAP #20):** two columns (reading left, navigation
+  and pinned plugins right) when the screen is wider than tall. Home now
+  rebuilds itself after a rotation (`KindleUI:onSetDimensions`, sent by
+  KOReader's file browser when it re-lays out). Library, Installed Plugins
+  and Send Book do not re-lay out if rotated while open (they are usually
+  closed when rotating from Settings); they are right the next time they open.
+
+## Next
+
+The ranked list (#1–21) is done and no 💡 ideas are left in
+docs/ROADMAP.md. What remains is checking on a real Kindle (see "Not
+verified on a real Kindle" below and docs/TESTING.md, section 3).
+
+ROADMAP: #1–21 are all marked ✅.
 
 ## Working notes
 
@@ -100,5 +125,7 @@ Housekeeping: in the ROADMAP table, mark #9 (Recently added), #10 (e-ink refresh
 - **KOReader widgets:**
   - `FrameContainer` ignores `width`; use `CenterContainer` to centre;
   - TitleBar needs `subtitle = " "` at creation for `setSubTitle` to work.
-- **Not verified on a real Kindle:** battery and Wi-Fi status, iptables, lipc, e-ink refresh, installer.
+- **Emulator tests that write to the plugins folder** (updater, plugin install)
+  use `KO_PLUGINS_DIR`; the default mount holds only this plugin, read-only.
+- **Not verified on a real Kindle:** battery and Wi-Fi status, iptables, lipc, e-ink refresh, plugin installer, quick settings (light, Wi-Fi, sleep).
 - **Repo visibility:** the repo must be public for the updater to work without a token.

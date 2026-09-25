@@ -50,6 +50,7 @@ function Extractor.start(items, callbacks)
             Cache.extract(it.path, e, it.w, it.h)
             local line = table.concat({
                 tostring(i), clean(e.title), clean(e.authors), e.cover or "", e.extracted and "1" or "0",
+                clean(e.series), e.series_index and tostring(e.series_index) or "",
             }, "\t") .. "\n"
             if not ffiUtil.writeToFD(write_fd, line) then break end -- parent gone
         end
@@ -73,13 +74,18 @@ function Extractor.start(items, callbacks)
 end
 
 function Job:_apply(line)
-    local idx, title, authors, cover, ok = line:match("^(%d+)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([01])$")
+    local idx, title, authors, cover, ok, series, series_index =
+        line:match("^(%d+)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([01])\t([^\t]*)\t([^\t]*)$")
     local item = idx and self.items[tonumber(idx)]
     if not item then return end
     local e = item.entry
     if title ~= "" and not e.title then
         e.title = title
         e.authors = authors ~= "" and authors or nil
+    end
+    if series ~= "" and not e.series then
+        e.series = series
+        e.series_index = tonumber(series_index)
     end
     e.cover = cover ~= "" and cover or nil
     e.extracted = ok == "1"

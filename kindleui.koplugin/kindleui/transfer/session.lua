@@ -47,6 +47,17 @@ local PHONE_MSG = {
 }
 Session.PHONE_MSG = PHONE_MSG
 
+-- Replacements when a plugin .zip (not a book) is being sent.
+Session.PLUGIN_MSG = {
+    unsupported = "Only a plugin .zip file can be sent here.",
+    too_large = "This file is too large for a plugin.",
+    disk_full = "Not enough storage space to receive this plugin.",
+    corrupt = "This is not a valid .zip file.",
+    io = "The plugin could not be received.",
+    one_only = "Only one plugin can be sent at a time.",
+    done = "Plugin sent. Confirm the install on your Kindle.",
+}
+
 --- @param o table
 --   dest_dir      (string)   where books go (KOReader home folder)
 --   is_supported  (function) filename -> bool (KOReader DocumentRegistry)
@@ -56,9 +67,13 @@ Session.PHONE_MSG = PHONE_MSG
 --   max_bytes     (int)      largest accepted upload
 --   firewall      (table)    optional { open(port), close(port) }
 --   callbacks     (table)    onProgress(filename, received, total, index, count),
---                            onReceived(path, filename, index, count),
+--                            onReceived(path, filename, index, count, collection),
 --                            onFailed(reason, filename), onFinished(paths),
 --                            onExpired(), onStopped(reason)
+--   kind          (string)   "books" (default) or "plugin" (page wording, phone messages)
+--   max_files     (int)      optional: uploads accepted per session
+--   collections   (table)    optional { { name, title }, ... }: offered on the phone page;
+--                            onReceived gets the chosen collection's name
 --   logger        (table)    optional KOReader logger
 --   random_source (string)   optional, tests only
 function Session:new(o)
@@ -68,6 +83,7 @@ function Session:new(o)
     o.max_bytes = o.max_bytes or 500 * 1024 * 1024
     o.callbacks = o.callbacks or {}
     o.clock = o.clock or os.time
+    o.kind = o.kind or "books"
     o.state = "new"
     return setmetatable(o, self)
 end
@@ -76,6 +92,12 @@ function Session:_log(level, ...)
     if self.logger and self.logger[level] then
         self.logger[level]("KindleUI session:", ...)
     end
+end
+
+-- Message shown on the phone for `key` (nil if there is none).
+function Session:_msg(key)
+    if key == nil then return nil end
+    return (self.kind == "plugin" and Session.PLUGIN_MSG[key]) or PHONE_MSG[key]
 end
 
 function Session:_emit(name, ...)
@@ -221,13 +243,13 @@ end
 
 function Session:onHeaders(req)
     if not self:isActive() then
-        return text(410, PHONE_MSG.expired)
+        return text(410, self:_msg("expired"))
     end
     local route = self:_route(req.path)
     if not route then
         self.bad_requests = (self.bad_requests or 0) + 1
         self:_log("warn", "rejected request with invalid/expired token (#" .. self.bad_requests .. ")")
-        return text(404, PHONE_MSG.expired)
+        return text(404, self:_msg("expired"))
     end
     if route == "page" then
         if req.method ~= "GET" and req.method ~= "HEAD" then return text(405, "Method not allowed.") end
@@ -240,12 +262,14 @@ function Session:onHeaders(req)
                 base_path = self:getPath(),
                 formats = self.format_list,
                 max_mb = math.floor(self.max_bytes / (1024 * 1024)),
+                kind = self.kind,
+                collections = self.collections,
             },
         }
     end
     if route == "finish" then
         if req.method ~= "POST" then return text(405, "Method not allowed.") end
-        if self.active_job then return text(409, PHONE_MSG.busy) end
+        if self.active_job then return text(409, self:_msg("busy")) end
         local paths = self.received
         self:_log("info", "phone finished; books received:", #paths)
         -- Stop on the next tick, *after* the server has sent this response.
@@ -253,38 +277,41 @@ function Session:onHeaders(req)
             self:stop("done")
             self:_emit("onFinished", paths)
         end)
-        return text(200, PHONE_MSG.done)
+        return text(200, self:_msg("done"))
     end
     if route ~= "upload" then return text(404, "Not found.") end
     if req.method ~= "POST" and req.method ~= "PUT" then return text(405, "Method not allowed.") end
-    if self.active_job then return text(409, PHONE_MSG.busy) end
+    if self.active_job then return text(409, self:_msg("busy")) end
+    if self.max_files and #self.received >= self.max_files then
+        return text(409, self:_msg("one_only") or self:_msg("busy"))
+    end
 
     local filename, why = Security.sanitizeFilename(req.query.name)
     if not filename then
         self:_log("warn", "rejected filename:", why)
-        return text(400, PHONE_MSG.bad_name)
+        return text(400, self:_msg("bad_name"))
     end
     if not self.is_supported(filename) then
         self:_log("info", "rejected unsupported file type:", Security.getExtension(filename))
         self:_emit("onFailed", "unsupported", filename)
-        return text(415, PHONE_MSG.unsupported)
+        return text(415, self:_msg("unsupported"))
     end
     local te = req.headers["transfer-encoding"]
     local len = tonumber(req.headers["content-length"] or "")
     if (te and te:lower() ~= "identity") or not len or len < 0 or len ~= math.floor(len) then
-        return text(411, PHONE_MSG.length_required)
+        return text(411, self:_msg("length_required"))
     end
     if len == 0 then
-        return text(400, PHONE_MSG.corrupt)
+        return text(400, self:_msg("corrupt"))
     end
     if len > self.max_bytes then
-        return text(413, PHONE_MSG.too_large)
+        return text(413, self:_msg("too_large"))
     end
     local free = (self.free_space or FS.freeSpace)(self.dest_dir)
     if free and free < len + 1024 * 1024 then -- keep 1 MiB headroom
         self:_log("warn", "not enough space:", len, "bytes needed,", free, "available")
         self:_emit("onFailed", "disk_full", filename)
-        return text(507, PHONE_MSG.disk_full)
+        return text(507, self:_msg("disk_full"))
     end
     local job = UploadJob:new{
         dir = self.dest_dir,
@@ -295,7 +322,7 @@ function Session:onHeaders(req)
     local ok, err = job:begin()
     if not ok then
         self:_emit("onFailed", err, filename)
-        return text(500, PHONE_MSG[err] or PHONE_MSG.io)
+        return text(500, self:_msg(err) or self:_msg("io"))
     end
     self.active_job = job
     self.state = "receiving"
@@ -303,6 +330,10 @@ function Session:onHeaders(req)
     local index = tonumber(req.query.index)
     local count = tonumber(req.query.count)
     job.index, job.count = index, count
+    -- A position in our own list; anything else is ignored.
+    local pick = tonumber(req.query.collection)
+    local coll = pick and self.collections and self.collections[pick]
+    job.collection = coll and coll.name or nil
     self:_log("info", "upload started:", len, "bytes, type", job.ext,
         index and count and string.format("(%d of %d)", index, count) or "")
     self:_emit("onProgress", filename, 0, len, index, count)
@@ -333,12 +364,12 @@ function Session:onUploadDone(req, job)
     if not path then
         self:_log("warn", "validation failed:", err)
         self:_emit("onFailed", err, job.filename)
-        return text(err == UploadJob.ERR_DISK_FULL and 507 or 422, PHONE_MSG[err] or PHONE_MSG.io)
+        return text(err == UploadJob.ERR_DISK_FULL and 507 or 422, self:_msg(err) or self:_msg("io"))
     end
     table.insert(self.received, path)
     self:_log("info", "upload complete, stored in destination directory")
-    self:_emit("onReceived", path, job.filename, job.index, job.count)
-    return text(200, PHONE_MSG.received)
+    self:_emit("onReceived", path, job.filename, job.index, job.count, job.collection)
+    return text(200, self:_msg("received"))
 end
 
 function Session:onUploadFailed(req, job, reason)
@@ -351,7 +382,7 @@ function Session:onUploadFailed(req, job, reason)
     if reason ~= "server_stopped" then
         self:_emit("onFailed", reason, job.filename)
     end
-    return text(reason == UploadJob.ERR_DISK_FULL and 507 or 500, PHONE_MSG[reason] or PHONE_MSG.incomplete)
+    return text(reason == UploadJob.ERR_DISK_FULL and 507 or 500, self:_msg(reason) or self:_msg("incomplete"))
 end
 
 return Session

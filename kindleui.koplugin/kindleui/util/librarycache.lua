@@ -34,6 +34,10 @@ local C = ffi.C
 pcall(ffi.cdef, "void free(void *);") -- already declared by koreader-base in practice
 
 local SCHEMA = 1
+-- Per-entry metadata version. 2 adds series/series_index: older entries are
+-- brought up to date the next time they are looked at (sidecar re-read for
+-- opened books, metadata/cover extraction again for the others).
+local META = 2
 local COVER_MAGIC = "KUIC1" -- header: magic, w, h, bb type, stride (text line) then zstd data
 
 local Cache = {
@@ -89,6 +93,10 @@ local function readSidecarInfo(ui, entry, path)
         entry.title = props.title
         entry.authors = props.authors
     end
+    if ok and props then
+        entry.series = props.series
+        entry.series_index = tonumber(props.series_index)
+    end
 end
 
 -- Brings one entry up to date. Returns the entry and whether the sidecar was read.
@@ -97,11 +105,20 @@ local function refreshEntry(ui, path, mtime, size)
     if not e or e.mtime ~= mtime or e.size ~= size then
         -- new or replaced file: start over (cover and metadata too)
         if e and e.cover then os.remove(coverDir() .. "/" .. e.cover) end
-        e = { mtime = mtime, size = size }
+        e = { mtime = mtime, size = size, meta = META }
         Cache.entries[path] = e
         Cache.dirty = true
     end
     local sdr = sidecarMtime(path)
+    if (e.meta or 1) < META then
+        e.meta = META
+        if sdr then
+            e.sdr = nil -- opened book: re-read its sidecar (below)
+        elseif e.extracted then
+            e.extracted = nil -- never opened: extract its metadata (and cover) again
+        end
+        Cache.dirty = true
+    end
     if e.sdr == sdr then
         return e, false
     end
@@ -131,6 +148,8 @@ function Cache.annotate(ui, books)
         end
         b.title = e.title or util.splitFileNameSuffix(b.name)
         b.authors = e.authors
+        b.series = e.series
+        b.series_index = e.series_index
         b.percent = e.percent
         b.status = e.status
         b.entry = e
@@ -157,14 +176,16 @@ function Cache.getEntry(ui, path)
 end
 
 --- The `n` most recently added books known to the cache (newest file time
--- first), skipping `exclude` and files that no longer exist. No folder scan:
+-- first), skipping `exclude` (a path, or a set of paths) and files that no
+-- longer exist. No folder scan:
 -- books copied over USB show up once My Library has been opened.
 -- @treturn table array of { path, entry }
 function Cache.recent(n, exclude)
     Cache.load()
+    if type(exclude) ~= "table" then exclude = exclude and { [exclude] = true } or {} end
     local list = {}
     for path, e in pairs(Cache.entries) do
-        if path ~= exclude and e.mtime then table.insert(list, { path = path, entry = e }) end
+        if not exclude[path] and e.mtime then table.insert(list, { path = path, entry = e }) end
     end
     table.sort(list, function(a, b) return a.entry.mtime > b.entry.mtime end)
     local out = {}
@@ -173,6 +194,28 @@ function Cache.recent(n, exclude)
         if lfs.attributes(it.path, "mode") == "file" then table.insert(out, it) end
     end
     return out
+end
+
+--- Makes the next read of this book re-read its sidecar (status or progress
+-- was just changed through KOReader).
+function Cache.invalidate(path)
+    Cache.load()
+    local e = Cache.entries[path]
+    if e then
+        e.sdr = nil
+        Cache.dirty = true
+    end
+end
+
+--- Forgets a deleted book, and its thumbnail.
+function Cache.forget(path)
+    Cache.load()
+    local e = Cache.entries[path]
+    if not e then return end
+    if e.cover then os.remove(coverDir() .. "/" .. e.cover) end
+    Cache.entries[path] = nil
+    Cache.dirty = true
+    Cache.save()
 end
 
 --- Drops everything (Library → Refresh), including thumbnails.
@@ -255,6 +298,10 @@ function Cache.extract(path, entry, max_w, max_h)
             if props.title and not entry.title then
                 entry.title = props.title
                 entry.authors = props.authors
+            end
+            if props.series and not entry.series then
+                entry.series = props.series
+                entry.series_index = tonumber(props.series_index)
             end
             local cover_bb = FileManagerBookInfo:getCoverImage(document)
             if cover_bb then

@@ -17,11 +17,17 @@ local logger = require("logger")
 
 local LocalHttp = {
     id = "local_http",
+    PLUGIN_MAX_BYTES = 20 * 1024 * 1024,
 }
+
+local function isZipName(name)
+    return name:lower():match("%.zip$") ~= nil
+end
 
 --- Pre-flight checks. Returns { ip = ..., dest_dir = ... } or nil + error key
 -- ("no_wifi" | "no_ip").
-function LocalHttp:prepare()
+-- @param opts optional { kind = "plugin" }: receive one plugin .zip instead of books
+function LocalHttp:prepare(opts)
     if not Network.isWifiConnected() then
         return nil, "no_wifi"
     end
@@ -29,24 +35,38 @@ function LocalHttp:prepare()
     if not ip then
         return nil, "no_ip"
     end
-    return { ip = ip, iface = iface, dest_dir = Books.destinationDir() }
+    local plugin = opts and opts.kind == "plugin"
+    return {
+        ip = ip,
+        iface = iface,
+        kind = plugin and "plugin" or "books",
+        dest_dir = plugin and require("kindleui/util/plugininstaller").incomingDir() or Books.destinationDir(),
+    }
 end
 
 --- Starts a session. Returns the session (with `.url`) or nil + error key
 -- ("server" | "random" | "dest_dir" | "qr").
 function LocalHttp:start(info, callbacks)
+    local plugin = info.kind == "plugin"
     local session = Session:new{
         dest_dir = info.dest_dir,
-        is_supported = Books.isSupportedName,
+        kind = info.kind,
+        is_supported = plugin and isZipName or Books.isSupportedName,
+        max_files = plugin and 1 or nil,
         scheduler = UIManager,
         port = Config.get("transfer_port"),
         timeout = Config.get("transfer_timeout"),
-        max_bytes = Config.get("transfer_max_mb") * 1024 * 1024,
+        max_bytes = plugin and LocalHttp.PLUGIN_MAX_BYTES or Config.get("transfer_max_mb") * 1024 * 1024,
         firewall = Network.firewallFor(Device),
         callbacks = callbacks,
         logger = logger,
     }
     session.format_list = Books.formatList()
+    if not plugin then
+        -- KOReader's collections, offered on the phone page.
+        local ok, list = pcall(function() return require("kindleui/ui/library").collections() end)
+        session.collections = ok and list or nil
+    end
     local ok, err = session:start()
     if not ok then
         return nil, err

@@ -64,12 +64,14 @@ kindleui.koplugin/
     ├── config.lua            defaults + G_reader_settings["kindleui"]
     ├── ui/
     │   ├── common.lua        fonts, lines, Tappable, single-tab TouchMenu helper
+    │   ├── bookmenu.lua      hold menu of a book (KOReader's status/reset/delete)
     │   ├── home.lua          Home (FocusManager: works with keys too)
     │   ├── library.lua       data loading + sort + options dialog + list view
     │   ├── librarygrid.lua   cover grid view (default)
     │   ├── plugins.lua       Installed Plugins (menus built only on tap)
+    │   ├── plugininstall.lua Install plugin from phone: pick, confirm, install, undo
     │   ├── settings.lua      Settings item tree (TouchMenu)
-    │   └── transfer.lua      Send Book screen (state machine)
+    │   └── transfer.lua      Send Book screen (state machine; also "Send plugin")
     ├── transfer/
     │   ├── provider.lua      provider registry (only local_http today)
     │   ├── localhttp.lua     "Local Wi-Fi" provider (pre-flight, session, sleep guard)
@@ -86,14 +88,17 @@ kindleui.koplugin/
         ├── perf.lua          "KindleUI perf:" timing/memory log lines
         ├── https.lua         HTTPS GET with CA-chain *and* host-name checks
         ├── updater.lua       Check for updates: latest commit → zip → stage → swap
+        ├── pluginzip.lua     plugin .zip analysis (pure: find folder, plan, _meta as text)
+        ├── plugininstaller.lua  install from a zip: stage → compile check → swap, Undo
         ├── network.lua       IPv4 discovery, Kindle firewall (logged)
         ├── filesystem.lua    paths, free space, writability, unique names,
         │                     format sniffing, stale temp cleanup
         └── security.lua      CSPRNG tokens, constant-time compare, filename sanitizer
 ```
 
-`transfer/{session,server,upload,uploadpage,qr}` and
-`util/{security,filesystem,network}` load under plain LuaJIT, so the automated
+`transfer/{session,server,upload,uploadpage,qr}`,
+`util/{security,filesystem,network,pluginzip}` and (with small stubs)
+`util/plugininstaller` load under plain LuaJIT, so the automated
 tests run them without KOReader.
 
 ## Screen flow
@@ -102,12 +107,14 @@ tests run them without KOReader.
 KOReader starts / a book is closed → new FileManager → plugin init → nextTick: Home
 Home ─ Continue Reading ─→ FileManager:openFile ─→ reader
      ─ My Library ───────→ cover grid (or list) ─ tap ─→ reader
-                                                 ─ hold ─→ KOReader book details
+                                                 ─ hold ─→ book menu (status, reset, remove from
+                                                            Continue Reading, details, delete)
                                                  ─ ☰ ─→ view, sort, refresh, "Browse all files (KOReader)"
      ─ + Send Book ──────→ TransferScreen
      ─ Installed Plugins ─→ list ─ tap ─→ that plugin's own menu (TouchMenu)
      ─ Settings ─────────→ Reading / Library / Device / Connectivity / Advanced / About
-                                                         └ Advanced → Open KOReader Settings
+                                                         └ Advanced → Open KOReader Settings,
+                                                           Install plugin from phone, Undo last plugin install
 reader ─ top menu file-browser icon, Home key, "File browser" gesture ─→ FileManager → Home
 Home ─ Back key ─→ KOReader file browser (☰ → Kindle-style Home brings it back)
 ```
@@ -256,6 +263,38 @@ opens the TLS connection itself: `verify = "peer"` against KOReader's bundled
 `data/ca-bundle.crt`, plus a subjectAltName host-name match. In the emulator
 it refused a wrong-host certificate, a self-signed one, a CA not in the
 bundle, and plain HTTP.
+
+## Install plugin from phone
+
+The Send Book screen with `kind = "plugin"` (Settings → Advanced, or the row
+at the end of Installed Plugins). Same session, token, server and expiry as
+Send Book; only these differ:
+
+```
+session: kind "plugin", max_files 1, only *.zip (zip magic checked), ≤ 20 MB,
+         stored in <settings>/kindleui-incoming/ (not the library)
+phone page: "SEND PLUGIN", one file, plugin wording
+phone POSTs /finish → screen closes → ui/plugininstall.lua:
+  Installer.analyze: list entries, find <name>.koplugin folder(s) (any depth,
+    also GitHub's "<name>.koplugin-main"), read fullname/description from
+    _meta.lua as text (nothing from the zip runs)
+  several plugins in the zip → pick one; built-in or this plugin → refused
+  confirm: name, description, new / replaces, full-access warning, disabled note
+  Installer.install:
+    PluginZip.plan: refuse "..", absolute paths, links; ≤ 50 MB, ≤ 5000 files;
+      only the plugin folder, minus __MACOSX/._*/.DS_Store/.git/…
+    extract → plugins/.<name>.koplugin.new; loadfile main.lua + _meta.lua
+    new:     rename .new → <name>.koplugin
+    replace: rename <name> → .<name>.old, .new → <name> (rollback on failure),
+             .old → .<name>.undo
+    Config last_plugin_install = { name, had_previous }; older .undo removed
+  → "Restart KOReader now?"
+Undo last plugin install: restore .<name>.undo, or remove the new plugin → restart
+```
+
+At startup `main.lua` empties the incoming folder and removes `.undo`
+folders the record does not point to; `Updater.cleanupLeftovers` already
+handles interrupted `.new`/`.old` folders.
 
 ## Future: cloud transfer
 
