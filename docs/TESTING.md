@@ -30,6 +30,27 @@ KOREADER_BASE=/path/to/koreader/base ./tests/run.sh   # also encodes the QR with
 
 ## 2. Emulator (real KOReader, scripted)
 
+**Smoke test** (run after every UI change):
+
+```sh
+tests/e2e/smoke.sh
+```
+
+An emulator-only KOReader patch (`tests/e2e/patches/2-kindleui-smoke.lua`)
+drives the plugin through its own functions:
+- leaving a book → Home;
+- Library grid: page turns, filter, search, Prepare all covers, options;
+- list view and sorting;
+- Installed Plugins: opening a plugin's menu, pinning;
+- Home refresh with pinned plugins and Recently added, at all three text sizes;
+- Settings;
+- Send Book, including New Code.
+
+It fails on any failed step or any plugin Lua error in the log, including
+errors that only happen while drawing. It is layout-independent (no screen
+coordinates).
+
+
 Requirements: Docker, `xwd` + `convert` (imagemagick), `xdotool`, `zbarimg`
 (zbar-tools), and Node + Playwright for the phone simulation. The image
 `wardwouts/koreader-novnc` (KOReader's Linux .deb + Xvfb) is pulled through
