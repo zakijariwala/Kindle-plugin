@@ -64,6 +64,50 @@ function Common.label(text, width)
     }
 end
 
+--- A plain "text cover" (title + author in a frame) for books without a
+-- cover image, like a Kindle shows.
+function Common.textCover(title, authors, w, h)
+    local FrameContainer = require("ui/widget/container/framecontainer")
+    local TextBoxWidget = require("ui/widget/textboxwidget")
+    local VerticalGroup = require("ui/widget/verticalgroup")
+    local VerticalSpan = require("ui/widget/verticalspan")
+    local pad = Screen:scaleBySize(8)
+    local small = h < Screen:scaleBySize(200)
+    local vg = VerticalGroup:new{ align = "center" }
+    table.insert(vg, TextBoxWidget:new{
+        text = title or "",
+        face = Font:getFace("tfont", Common.fs(small and 13 or 17)),
+        width = w - 2 * pad,
+        alignment = "center",
+        height = math.floor(h * (authors and 0.6 or 0.85)),
+        height_adjust = true,
+        height_overflow_show_ellipsis = true,
+    })
+    if authors then
+        table.insert(vg, VerticalSpan:new{ width = pad })
+        table.insert(vg, TextBoxWidget:new{
+            text = authors,
+            face = Font:getFace("cfont", Common.fs(small and 11 or 14)),
+            width = w - 2 * pad,
+            alignment = "center",
+            height = math.floor(h * 0.25),
+            height_adjust = true,
+            height_overflow_show_ellipsis = true,
+        })
+    end
+    return FrameContainer:new{
+        width = w,
+        height = h,
+        bordersize = Size.border.thin,
+        padding = 0,
+        background = Blitbuffer.COLOR_WHITE,
+        CenterContainer:new{
+            dimen = Geom:new{ w = w - 2 * Size.border.thin, h = h - 2 * Size.border.thin },
+            vg,
+        },
+    }
+end
+
 --- A container that calls `callback` when tapped anywhere inside its content.
 -- Also focusable for devices with keys only (FocusManager sends Tap events).
 Common.Tappable = InputContainer:extend{

@@ -106,40 +106,7 @@ end
 
 -- A plain "text cover" for books without a cover image (yet).
 function LibraryGrid:textCover(book)
-    local pad = Screen:scaleBySize(8)
-    local vg = VerticalGroup:new{ align = "center" }
-    table.insert(vg, TextBoxWidget:new{
-        text = book.title or "",
-        face = Font:getFace("tfont", Common.fs(17)),
-        width = self.cover_w - 2 * pad,
-        alignment = "center",
-        height = math.floor(self.cover_h * 0.6),
-        height_adjust = true,
-        height_overflow_show_ellipsis = true,
-    })
-    if book.authors then
-        table.insert(vg, VerticalSpan:new{ width = pad })
-        table.insert(vg, TextBoxWidget:new{
-            text = book.authors,
-            face = Font:getFace("cfont", Common.fs(14)),
-            width = self.cover_w - 2 * pad,
-            alignment = "center",
-            height = math.floor(self.cover_h * 0.25),
-            height_adjust = true,
-            height_overflow_show_ellipsis = true,
-        })
-    end
-    return FrameContainer:new{
-        width = self.cover_w,
-        height = self.cover_h,
-        bordersize = Size.border.thin,
-        padding = 0,
-        background = Blitbuffer.COLOR_WHITE,
-        CenterContainer:new{
-            dimen = Geom:new{ w = self.cover_w - 2 * Size.border.thin, h = self.cover_h - 2 * Size.border.thin },
-            vg,
-        },
-    }
+    return Common.textCover(book.title, book.authors, self.cover_w, self.cover_h)
 end
 
 -- Tile content: cover (or text cover) + progress label.

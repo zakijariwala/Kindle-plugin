@@ -97,6 +97,14 @@ function Settings.build(plugin)
             sub_item_table = sort_items,
         },
         {
+            text = _("Show \"Recently added\" on Home"),
+            checked_func = function() return Config.get("home_recent") ~= false end,
+            callback = function()
+                Config.set("home_recent", Config.get("home_recent") == false)
+                plugin:onLibraryChanged()
+            end,
+        },
+        {
             text = _("Show Home screen at startup"),
             help_text = _("When disabled, KOReader starts in its regular file browser. The Home screen stays available from the KOReader main menu."),
             checked_func = function() return Config.get("show_on_start") end,

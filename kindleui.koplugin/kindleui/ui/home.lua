@@ -60,6 +60,10 @@ function Home:_freeCover()
         self.cover_widget:free()
         self.cover_widget = nil
     end
+    for __, image in ipairs(self.recent_images or {}) do
+        image:free()
+    end
+    self.recent_images = {}
 end
 
 function Home:_continueReading(inner_w)
@@ -199,9 +203,10 @@ function Home:build()
     space(Screen:scaleBySize(10))
     local continue_widget, continue_focus = self:_continueReading(inner_w)
     add(continue_widget)
+    self.layout = { { continue_focus } }
+    self:_recentlyAdded(add, space, inner_w)
     space(Screen:scaleBySize(34))
 
-    self.layout = { { continue_focus } }
     local nav = {
         { _("My Library"), function() self.plugin:showLibrary() end },
         { _("+ Send Book"), function() self.plugin:showTransfer() end },
@@ -241,6 +246,43 @@ function Home:build()
         vgroup,
     }
     self:moveFocusTo(1, 1, FocusManager.FOCUS_ONLY_ON_NT)
+end
+
+-- "Recently added": the 3 newest books, as small covers. From the library
+-- cache only (no folder scan), so Home stays fast.
+function Home:_recentlyAdded(add, space, inner_w)
+    if Config.get("home_recent") == false then return end
+    local items = Cache.recent(3, Books.lastFile())
+    if #items == 0 then return end
+    space(Screen:scaleBySize(22))
+    add(Common.label(_("Recently added"), inner_w))
+    space(Screen:scaleBySize(10))
+    local h = Screen:scaleBySize(120)
+    local w = math.floor(h * 2 / 3)
+    local gap = Screen:scaleBySize(16)
+    local row = HorizontalGroup:new{ align = "top" }
+    local layout_row = {}
+    for i, it in ipairs(items) do
+        if i > 1 then table.insert(row, HorizontalSpan:new{ width = gap }) end
+        local cover
+        local bb = Cache.loadCover(it.entry)
+        if bb then
+            local image = ImageWidget:new{ image = bb, image_disposable = true, width = w, height = h, scale_factor = 0 }
+            table.insert(self.recent_images, image)
+            cover = FrameContainer:new{ bordersize = Size.border.thin, padding = 0, image }
+        else
+            cover = Common.textCover(it.entry.title or filemanagerutil.splitFileNameType(it.path), nil, w, h)
+        end
+        local path = it.path
+        local tile = Common.Tappable:new{
+            callback = function() self.plugin:openBook(path) end,
+            cover,
+        }
+        table.insert(row, tile)
+        table.insert(layout_row, tile)
+    end
+    add(row)
+    table.insert(self.layout, layout_row)
 end
 
 -- "9:42 · Wi-Fi · ▯ 83%": read once when Home is built (no clock timer).
