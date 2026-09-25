@@ -17,6 +17,7 @@ local Perf = require("kindleui/util/perf")
 local filemanagerutil = require("apps/filemanager/filemanagerutil")
 local Button = require("ui/widget/button")
 local Common = require("kindleui/ui/common")
+local Config = require("kindleui/config")
 local Device = require("device")
 local FocusManager = require("ui/widget/focusmanager")
 local FrameContainer = require("ui/widget/container/framecontainer")
@@ -32,6 +33,7 @@ local UIManager = require("ui/uimanager")
 local VerticalGroup = require("ui/widget/verticalgroup")
 local VerticalSpan = require("ui/widget/verticalspan")
 local _ = require("gettext")
+local T = require("ffi/util").template
 local Screen = Device.screen
 
 local Home = FocusManager:extend{
@@ -212,6 +214,7 @@ function Home:build()
         add(Common.line(inner_w))
         table.insert(self.layout, { btn })
     end
+    self:_pinnedPlugins(add, space, inner_w)
 
     self[1] = FrameContainer:new{
         width = w,
@@ -225,6 +228,59 @@ function Home:build()
         vgroup,
     }
     self:moveFocusTo(1, 1, FocusManager.FOCUS_ONLY_ON_NT)
+end
+
+-- Plugins pinned from Installed Plugins (hold → Pin to Home): two per row.
+function Home:_pinnedPlugins(add, space, inner_w)
+    local names = Config.get("pinned_plugins")
+    if not names or #names == 0 then return end
+    local Plugins = require("kindleui/ui/plugins")
+    local entries = {}
+    for __, name in ipairs(names) do
+        local entry = Plugins.find(self.plugin, name)
+        if entry and not entry.disabled then table.insert(entries, entry) end
+    end
+    if #entries == 0 then return end -- removed or disabled since: just don't show
+    space(Screen:scaleBySize(26))
+    add(Common.label(_("Pinned plugins"), inner_w))
+    space(Screen:scaleBySize(10))
+    local gap = Screen:scaleBySize(14)
+    local btn_w = math.floor((inner_w - gap) / 2)
+    for i = 1, #entries, 2 do
+        local row = HorizontalGroup:new{ align = "center" }
+        local layout_row = {}
+        for j = i, math.min(i + 1, #entries) do
+            local entry = entries[j]
+            if j > i then table.insert(row, HorizontalSpan:new{ width = gap }) end
+            local btn = Button:new{
+                text = entry.text,
+                width = btn_w,
+                text_font_face = "cfont",
+                text_font_size = 19,
+                text_font_bold = false,
+                radius = Size.radius.button,
+                padding_v = Screen:scaleBySize(12),
+                show_parent = self,
+                callback = function() Plugins.open(entry) end,
+                hold_callback = function()
+                    local ConfirmBox = require("ui/widget/confirmbox")
+                    UIManager:show(ConfirmBox:new{
+                        text = T(_("Unpin %1 from Home?"), entry.text),
+                        ok_text = _("Unpin"),
+                        ok_callback = function()
+                            Plugins.setPinned(entry.name, false)
+                            self:refresh()
+                        end,
+                    })
+                end,
+            }
+            table.insert(row, btn)
+            table.insert(layout_row, btn)
+        end
+        add(row)
+        space(gap)
+        table.insert(self.layout, layout_row)
+    end
 end
 
 --- Rebuilds the screen (e.g. after a book was read or received).

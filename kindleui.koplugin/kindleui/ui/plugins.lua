@@ -17,7 +17,9 @@ reconfigured.
 @module kindleui.ui.plugins
 ]]
 
+local ButtonDialog = require("ui/widget/buttondialog")
 local Common = require("kindleui/ui/common")
+local Config = require("kindleui/config")
 local Device = require("device")
 local InfoMessage = require("ui/widget/infomessage")
 local Menu = require("ui/widget/menu")
@@ -82,6 +84,98 @@ function Plugins:init()
     Menu.init(self)
 end
 
+-- Pinned plugins (shown on Home) -------------------------------------------
+
+Plugins.MAX_PINNED = 4
+
+function Plugins.pinned()
+    return Config.get("pinned_plugins") or {}
+end
+
+function Plugins.isPinned(name)
+    for __, n in ipairs(Plugins.pinned()) do
+        if n == name then return true end
+    end
+    return false
+end
+
+--- Pins or unpins a plugin. Returns false (and explains) when the limit is hit.
+function Plugins.setPinned(name, pin)
+    local list = {}
+    for __, n in ipairs(Plugins.pinned()) do
+        if n ~= name then table.insert(list, n) end
+    end
+    if pin then
+        if #list >= Plugins.MAX_PINNED then
+            UIManager:show(InfoMessage:new{
+                text = T(_("Home shows at most %1 pinned plugins. Unpin one first."), Plugins.MAX_PINNED),
+            })
+            return false
+        end
+        table.insert(list, name)
+    end
+    Config.set("pinned_plugins", list)
+    return true
+end
+
+--- Everything needed to show or open one plugin, or nil if it is not installed.
+-- @treturn table { name, text, module, instance, disabled }
+function Plugins.find(plugin, name)
+    local enabled, disabled = PluginLoader:loadPlugins()
+    for __, module in ipairs(enabled or {}) do
+        if module.name == name then
+            return {
+                name = name,
+                text = module.fullname or name,
+                module = module,
+                instance = PluginLoader:getPluginInstance(name) or (plugin and plugin.ui and plugin.ui[name]),
+            }
+        end
+    end
+    for __, module in ipairs(disabled or {}) do
+        if module.name == name then
+            return { name = name, text = module.fullname or name, module = module, disabled = true }
+        end
+    end
+    return nil
+end
+
+--- Opens a plugin's own menu (or explains why there is none).
+-- Its addToMainMenu() is called only now, for this one plugin.
+function Plugins.open(entry)
+    local desc = entry.module and entry.module.description or ""
+    if entry.disabled then
+        UIManager:show(InfoMessage:new{
+            text = T(_("%1 is installed but disabled.\n\nYou can enable it in Manage plugins (KOReader) at the end of the Installed Plugins list."), entry.text)
+                .. (desc ~= "" and ("\n\n" .. desc) or ""),
+        })
+        return
+    end
+    local menu_items = entry.instance and Plugins.collectMenuItems(entry.instance) or {}
+    if #menu_items == 0 then
+        local msg
+        if not entry.instance then
+            msg = T(_("%1 is only available while a book is open.\n\nOpen a book, then use the KOReader menu (tap the top of the screen)."), entry.text)
+        else
+            msg = T(_("%1 is installed and running, but has no menu of its own.\n\nIts options (if any) are in the KOReader menus: Settings → Advanced."), entry.text)
+        end
+        UIManager:show(InfoMessage:new{ text = msg .. (desc ~= "" and ("\n\n" .. desc) or "") })
+        return
+    end
+    -- A plugin with a single entry that is a sub-menu: open that sub-menu directly.
+    local items = menu_items
+    if #items == 1 then
+        local only = items[1]
+        local sub = only.sub_item_table_func and only.sub_item_table_func() or only.sub_item_table
+        if sub then
+            items = sub
+        end
+    end
+    Common.showTouchMenu(items, "appbar.tools")
+end
+
+-- The list ------------------------------------------------------------------
+
 function Plugins:buildItems()
     local enabled, disabled = PluginLoader:loadPlugins()
     local rows = {}
@@ -99,11 +193,13 @@ function Plugins:buildItems()
             else
                 state = _("No menu")
             end
+            if Plugins.isPinned(module.name) then
+                state = _("Pinned") .. " · " .. state
+            end
             table.insert(rows, {
                 text = module.fullname or module.name,
                 mandatory = state,
-                plugin_module = module,
-                plugin_instance = instance,
+                entry = { name = module.name, text = module.fullname or module.name, module = module, instance = instance },
             })
         end
     end
@@ -111,8 +207,7 @@ function Plugins:buildItems()
         table.insert(rows, {
             text = module.fullname or module.name,
             mandatory = _("Disabled"),
-            plugin_module = module,
-            disabled = true,
+            entry = { name = module.name, text = module.fullname or module.name, module = module, disabled = true },
         })
     end
     table.sort(rows, function(a, b) return a.text:lower() < b.text:lower() end)
@@ -127,39 +222,42 @@ end
 function Plugins:onMenuChoice(item)
     if item.manage then
         self.plugin:showPluginManagement()
-        return true
+    elseif item.entry then
+        Plugins.open(item.entry)
     end
-    local module = item.plugin_module
-    local desc = module and module.description or ""
-    if item.disabled then
-        UIManager:show(InfoMessage:new{
-            text = T(_("%1 is installed but disabled.\n\nYou can enable it in Manage plugins (KOReader) at the end of this list."), item.text)
-                .. (desc ~= "" and ("\n\n" .. desc) or ""),
-        })
-        return true
-    end
-    -- Built only now, for this one plugin.
-    local menu_items = item.plugin_instance and Plugins.collectMenuItems(item.plugin_instance) or {}
-    if #menu_items == 0 then
-        local msg
-        if not item.plugin_instance then
-            msg = T(_("%1 is only available while a book is open.\n\nOpen a book, then use the KOReader menu (tap the top of the screen)."), item.text)
-        else
-            msg = T(_("%1 is installed and running, but has no menu of its own.\n\nIts options (if any) are in the KOReader menus: Settings → Advanced."), item.text)
-        end
-        UIManager:show(InfoMessage:new{ text = msg .. (desc ~= "" and ("\n\n" .. desc) or "") })
-        return true
-    end
-    -- A plugin with a single entry that is a sub-menu: open that sub-menu directly.
-    local items = menu_items
-    if #items == 1 then
-        local only = items[1]
-        local sub = only.sub_item_table_func and only.sub_item_table_func() or only.sub_item_table
-        if sub then
-            items = sub
-        end
-    end
-    Common.showTouchMenu(items, "appbar.tools")
+    return true
+end
+
+-- Hold a plugin: pin it to (or unpin it from) Home.
+function Plugins:onMenuHold(item)
+    local entry = item.entry
+    if not entry or entry.disabled then return true end
+    local pinned = Plugins.isPinned(entry.name)
+    local dialog
+    dialog = ButtonDialog:new{
+        title = entry.text,
+        title_align = "center",
+        buttons = {
+            {{
+                text = pinned and _("Unpin from Home") or _("Pin to Home"),
+                callback = function()
+                    UIManager:close(dialog)
+                    if Plugins.setPinned(entry.name, not pinned) then
+                        self:switchItemTable(nil, self:buildItems(), -1)
+                        self.plugin:onLibraryChanged() -- Home rebuilds when this screen closes
+                    end
+                end,
+            }},
+            {{
+                text = _("Open"),
+                callback = function()
+                    UIManager:close(dialog)
+                    Plugins.open(entry)
+                end,
+            }},
+        },
+    }
+    UIManager:show(dialog)
     return true
 end
 

@@ -18,6 +18,7 @@ local DEFAULTS = {
     library_sort = "recent",       -- "recent" | "title" | "author" | "added"
     library_view = "covers",       -- "covers" | "list"
     library_filter = "all",        -- "all" | "unread" | "reading" | "finished"
+    pinned_plugins = nil,          -- plugin names pinned to Home (max 4); nil = none
     library_max_books = 2000,      -- safety cap for the library scan
     library_max_depth = 6,         -- folder depth scanned below the home folder
     transfer_method = "local_http",

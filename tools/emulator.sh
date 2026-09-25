@@ -15,6 +15,7 @@
 #            KO_ADD_HOST=name:ip, KO_EXTRA_MOUNT=host:container  (updater tests)
 #   tools/emulator.sh shot out.png        screenshot
 #   tools/emulator.sh tap X Y             tap at screen coordinates
+#   tools/emulator.sh hold X Y            long-press
 #   tools/emulator.sh swipe X1 Y1 X2 Y2   drag
 #   tools/emulator.sh key KEY             X key name (e.g. Escape)
 #   tools/emulator.sh log                 KOReader log (crash.log equivalent)
@@ -64,6 +65,9 @@ shot)
     ;;
 tap)
     DISPLAY=$(disp) xdotool mousemove "$2" "$3" click 1
+    ;;
+hold)
+    DISPLAY=$(disp) xdotool mousemove "$2" "$3" mousedown 1 sleep 1.2 mouseup 1
     ;;
 swipe)
     DISPLAY=$(disp) xdotool mousemove "$2" "$3" mousedown 1 mousemove --sync "$(( ($2+$4)/2 ))" "$(( ($3+$5)/2 ))" mousemove "$4" "$5" mouseup 1
