@@ -59,10 +59,11 @@ function LibraryGrid:init()
     if Device:isTouchDevice() then
         self.ges_events.Swipe = { GestureRange:new{ ges = "swipe", range = self.dimen } }
     end
-    self.page = 1
     self.tiles = {}
     self:computeLayout()
     self.books = Library.loadBooks(self.plugin)
+    -- Come back to the page you were on (for this KOReader session).
+    self.page = math.max(1, math.min(Library.session.grid_page or 1, self:pageCount()))
     self:buildPage()
 end
 
@@ -384,6 +385,7 @@ function LibraryGrid:onClose()
 end
 
 function LibraryGrid:onCloseWidget()
+    Library.session.grid_page = self.page
     self:stopExtraction()
     self:freeImages()
     Cache.save()

@@ -36,6 +36,8 @@ local VIEWS = {
 local Library = {
     SORTS = SORTS,
     VIEWS = VIEWS,
+    -- Remembered for this KOReader session only (not saved to disk).
+    session = { grid_page = 1, list_page = 1 },
 }
 
 local function lower(s) return s and s:lower() or "" end
@@ -134,6 +136,9 @@ function Library.showOptions(widget, plugin)
             callback = function()
                 UIManager:close(dialog)
                 Config.set("library_sort", s.id)
+                -- a new order starts at the first page
+                Library.session.grid_page, Library.session.list_page = 1, 1
+                widget.page = 1
                 widget:reload()
             end,
         }})
@@ -186,6 +191,9 @@ function Library.List:init()
     self.height = Screen:getHeight()
     self.item_table = self:buildItems()
     Menu.init(self)
+    if Library.session.list_page > 1 then
+        self:onGotoPage(math.min(Library.session.list_page, self.page_num or 1))
+    end
 end
 
 function Library.List:buildItems()
@@ -231,6 +239,7 @@ function Library.List:onLeftButtonTap()
 end
 
 function Library.List:onCloseWidget()
+    Library.session.list_page = self.page or 1
     Menu.onCloseWidget(self)
     if self.plugin then self.plugin:onChildClosed() end
 end
