@@ -19,6 +19,7 @@ local Blitbuffer = require("ffi/blitbuffer")
 local Books = require("kindleui/util/books")
 local Cache = require("kindleui/util/librarycache")
 local Extractor = require("kindleui/util/extractor")
+local Format = require("kindleui/util/format")
 local Perf = require("kindleui/util/perf")
 local filemanagerutil = require("apps/filemanager/filemanagerutil")
 local Button = require("ui/widget/button")
@@ -38,6 +39,7 @@ local UIManager = require("ui/uimanager")
 local VerticalGroup = require("ui/widget/verticalgroup")
 local VerticalSpan = require("ui/widget/verticalspan")
 local logger = require("logger")
+local time = require("ui/time")
 local _ = require("gettext")
 local N_ = _.ngettext
 local T = require("ffi/util").template
@@ -92,8 +94,13 @@ function TransferScreen:startSession()
     local session
     session, err = provider:start(info, {
         onProgress = function(filename, received, total, index, count)
+            -- A new file starts at 0 bytes: restart the speed measurement.
+            if received == 0 or not self.xfer_t0 or self.xfer_name ~= filename then
+                self.xfer_t0, self.xfer_name = time.monotonic(), filename
+            end
+            local elapsed = time.to_number(time.monotonic() - self.xfer_t0)
             self:setState("receiving", { filename = filename, received = received, total = total,
-                index = index, count = count })
+                index = index, count = count, rate = Format.rate(received, total, elapsed) })
         end,
         onFailed = function(reason, filename)
             self:setState("failed", { reason = reason, filename = filename })
@@ -292,7 +299,12 @@ function TransferScreen:render()
             percentage = pct / 100,
         })
         space(8)
-        add(text(T(_("%1%"), pct), Common.face("body"), inner_w))
+        add(text(T(_("%1%"), pct) .. (d.total and ("  ·  " .. Format.size(d.received) .. " / " .. Format.size(d.total)) or ""),
+            Common.face("body"), inner_w))
+        if d.rate then
+            space(6)
+            add(text(d.rate, Common.face("small"), inner_w))
+        end
         space(40)
         add(self:_button(_("Cancel"), function() self:onClose() end, btn_w))
     elseif self.state == "received" then
