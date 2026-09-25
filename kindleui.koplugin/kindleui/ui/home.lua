@@ -23,6 +23,9 @@ local FocusManager = require("ui/widget/focusmanager")
 local FrameContainer = require("ui/widget/container/framecontainer")
 local Geom = require("ui/geometry")
 local HorizontalGroup = require("ui/widget/horizontalgroup")
+local LeftContainer = require("ui/widget/container/leftcontainer")
+local OverlapGroup = require("ui/widget/overlapgroup")
+local RightContainer = require("ui/widget/container/rightcontainer")
 local HorizontalSpan = require("ui/widget/horizontalspan")
 local ImageWidget = require("ui/widget/imagewidget")
 local ProgressWidget = require("ui/widget/progresswidget")
@@ -177,7 +180,17 @@ function Home:build()
     local function add(widget) table.insert(vgroup, widget) end
     local function space(n) add(VerticalSpan:new{ width = n }) end
 
-    add(TextWidget:new{ text = _("Home"), face = Common.face("title"), max_width = inner_w })
+    -- Title on the left, status (time · Wi-Fi · battery) on the right.
+    local status = self:_statusText()
+    local status_widget = TextWidget:new{ text = status, face = Common.face("small"), max_width = math.floor(inner_w * 0.6) }
+    local title_widget = TextWidget:new{ text = _("Home"), face = Common.face("title"),
+        max_width = inner_w - status_widget:getSize().w - Screen:scaleBySize(10) }
+    local row_h = math.max(title_widget:getSize().h, status_widget:getSize().h)
+    add(OverlapGroup:new{
+        dimen = Geom:new{ w = inner_w, h = row_h },
+        LeftContainer:new{ dimen = Geom:new{ w = inner_w, h = row_h }, title_widget },
+        RightContainer:new{ dimen = Geom:new{ w = inner_w, h = row_h }, status_widget },
+    })
     space(Size.span.vertical_large * 2)
     add(Common.line(inner_w, true))
     space(Screen:scaleBySize(22))
@@ -228,6 +241,35 @@ function Home:build()
         vgroup,
     }
     self:moveFocusTo(1, 1, FocusManager.FOCUS_ONLY_ON_NT)
+end
+
+-- "9:42 · Wi-Fi · ▯ 83%": read once when Home is built (no clock timer).
+function Home:_statusText()
+    local parts = {}
+    local ok_dt, datetime = pcall(require, "datetime")
+    if ok_dt then
+        table.insert(parts, datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock")))
+    end
+    if Device:hasWifiToggle() then
+        local ok_n, NetworkMgr = pcall(require, "ui/network/manager")
+        if ok_n and NetworkMgr:isWifiOn() then
+            table.insert(parts, _("Wi-Fi"))
+        end
+    end
+    if Device:hasBattery() then
+        local powerd = Device:getPowerDevice()
+        local lvl = powerd:getCapacity()
+        local symbol = powerd:getBatterySymbol(powerd:isCharged(), powerd:isCharging(), lvl)
+        table.insert(parts, symbol .. " " .. lvl .. "%")
+    end
+    return table.concat(parts, "  ·  ")
+end
+
+-- Back from sleep: the time and battery shown are stale, redraw once.
+function Home:onResume()
+    UIManager:nextTick(function()
+        if UIManager:isWidgetShown(self) then self:refresh() end
+    end)
 end
 
 -- Plugins pinned from Installed Plugins (hold → Pin to Home): two per row.
