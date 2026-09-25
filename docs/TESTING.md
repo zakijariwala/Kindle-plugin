@@ -46,6 +46,8 @@ drives the plugin through its own functions:
   falling back to all books), Prepare all covers, options,
   the hold menu, and deleting a book through it (file, cache entry and tile
   gone);
+- selection mode: from the book menu, toggling, select page, batch delete of
+  two books (files gone), leaving it with close; in the list view too;
 - list view and sorting, and its hold menu;
 - Installed Plugins: opening a plugin's menu, pinning;
 - Home refresh with pinned plugins and Recently added, at all three text sizes,
@@ -72,7 +74,9 @@ phone page does, checks the confirm text, confirms, and checks the files (no
 junk, README kept) and the restart prompt. After a restart the log must show
 `GREETER LOADED v1`. It then sends v2 (confirm says "replaces", `.undo`
 kept), restarts (v2 loaded), runs Undo, restarts (v1 loaded, no `.undo`,
-`.new` or `.old` left), and fails on any Lua error in the log. Screenshots of
+`.new` or `.old` left), then removes it through Installed Plugins' selection
+mode (confirm text, restart prompt, folder gone, not loaded after a restart),
+and fails on any Lua error in the log. Screenshots of
 both confirm screens are left in `/tmp/kindleui-pi-e2e/`.
 
 It fails on any failed step or any plugin Lua error in the log, including

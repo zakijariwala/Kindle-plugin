@@ -2,7 +2,8 @@
 # End-to-end test of "Install plugin from phone" inside the KOReader emulator:
 # a GitHub-layout .zip (with junk files) is sent like a phone would, confirmed,
 # KOReader restarts and loads it; a second version replaces it; Undo brings
-# the first version back. Fails on any wrong step or Lua error in the log.
+# the first version back; removing it from Installed Plugins deletes it.
+# Fails on any wrong step or Lua error in the log.
 #
 #   tests/e2e/plugininstall.sh
 set -e
@@ -89,6 +90,14 @@ restart
 wait_for "GREETER LOADED v1" 5
 [ ! -e "$W/plugins/.greeter.koplugin.undo" ] || fail "undo folder left"
 ls -A "$W/plugins" | grep -qE '\.(new|old)$' && fail "staging folder left"
+
+echo "4. remove it from Installed Plugins (selection mode)"
+cmd remove
+since_start | grep -q "remove confirm: Remove these plugins permanently? | Greeter" || fail "remove confirm text"
+wait_for "after remove: Plugins removed. Restart KOReader" 10
+[ ! -e "$W/plugins/greeter.koplugin" ] || fail "plugin folder not removed"
+restart
+since_start | grep -q "GREETER LOADED" && fail "removed plugin still loaded"
 
 ERRORS=$(tools/emulator.sh log | grep -E "attempt to|stack traceback|kindleui[^ ]*\.lua:[0-9]+:|KINDLEUI PI FAIL" || true)
 [ -z "$ERRORS" ] || fail "Lua errors in the log: $ERRORS"

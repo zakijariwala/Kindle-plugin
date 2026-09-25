@@ -179,6 +179,15 @@ local steps = {
         Plugins.open(entry)
     end },
     { "close plugin menu", closeTop },
+    { "plugins: selection offers no built-in plugin", function()
+        local list = top()
+        list:setSelecting(true)
+        for __, row in ipairs(list.item_table) do
+            assert(not row.select_module, "selectable: " .. tostring(row.text))
+        end
+        list:onClose()
+        assert(top() == list and not list.selecting, "close did not just leave selection")
+    end },
     { "pin two plugins", function()
         local Plugins = require("kindleui/ui/plugins")
         Plugins.setPinned("calibre", true)

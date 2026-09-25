@@ -31,6 +31,28 @@ local commands = {
             log("after confirm: " .. oneLine(after and after.text))
         end)
     end,
+    remove = function()
+        plugin():showPlugins()
+        local list = top()
+        local target
+        for __, row in ipairs(list.item_table) do
+            if row.entry and row.entry.name == "greeter" then target = row end
+        end
+        assert(target, "greeter not listed")
+        list:onMenuHold(target)
+        local hold = top()
+        hold.buttons[#hold.buttons][1].callback() -- Select plugins to remove…
+        assert(list.selecting and list.to_remove.greeter, "greeter not selected")
+        list:onMenuChoice(list.item_table[1]) -- Remove 1 selected…
+        local confirm = top()
+        log("remove confirm: " .. oneLine(confirm.text))
+        UIManager:close(confirm)
+        confirm.ok_callback()
+        UIManager:scheduleIn(1, function()
+            local after = top()
+            log("after remove: " .. oneLine(after and after.text))
+        end)
+    end,
     undo = function()
         local Installer = require("kindleui/util/plugininstaller")
         local record, err = Installer.undo()
