@@ -131,6 +131,23 @@ function Books.lastFile()
     return nil
 end
 
+--- Books from KOReader's reading history, most recently read first, that
+-- still exist: at most `n`, skipping the paths in the set `exclude`.
+function Books.recentlyRead(n, exclude)
+    local out = {}
+    local ok, ReadHistory = pcall(require, "readhistory")
+    if not ok or not ReadHistory or not ReadHistory.hist then return out end
+    for __, item in ipairs(ReadHistory.hist) do
+        if #out >= n then break end
+        local file = item.file
+        if file and not item.dim and not (exclude and exclude[file])
+                and lfs.attributes(file, "mode") == "file" then
+            table.insert(out, file)
+        end
+    end
+    return out
+end
+
 --- Map of file -> last read timestamp, from KOReader's reading history.
 function Books.historyTimes()
     local times = {}

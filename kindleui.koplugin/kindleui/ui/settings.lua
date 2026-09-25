@@ -98,6 +98,15 @@ function Settings.build(plugin)
             sub_item_table = sort_items,
         },
         {
+            text = _("Show other books being read on Home"),
+            help_text = _("Up to two more books from your reading history, under Continue Reading. Finished books are left out."),
+            checked_func = function() return Config.get("home_more_reading") ~= false end,
+            callback = function()
+                Config.set("home_more_reading", Config.get("home_more_reading") == false)
+                plugin:onLibraryChanged()
+            end,
+        },
+        {
             text = _("Show \"Recently added\" on Home"),
             checked_func = function() return Config.get("home_recent") ~= false end,
             callback = function()

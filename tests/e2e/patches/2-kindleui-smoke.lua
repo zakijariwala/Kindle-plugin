@@ -13,6 +13,13 @@ local function plugin()
     local FileManager = require("apps/filemanager/filemanager")
     return FileManager.instance and FileManager.instance.kindleui
 end
+local function homeFits()
+    local home = top()
+    assert(home.name == "kindleui_home", "top is " .. tostring(home.name))
+    assert(home.used_height <= home.dimen.h, "Home is taller than the screen: " .. home.used_height .. " > " .. home.dimen.h)
+    logger.info(string.format("KINDLEUI SMOKE home fit: %d px of %d, more=%d recent=%s compact=%s",
+        home.used_height, home.dimen.h, home.fit.more, tostring(home.fit.recent), tostring(home.fit.compact == true)))
+end
 local function setting(key, value)
     require("kindleui/config").set(key, value)
 end
@@ -52,10 +59,32 @@ local steps = {
         Plugins.setPinned("statistics", true)
     end },
     { "close plugins", closeTop },
-    { "home refresh (pinned, recent, status)", function() plugin():showHome() end },
-    { "text size large", function() setting("text_size", "large") plugin():showHome() end },
-    { "text size small", function() setting("text_size", "small") plugin():showHome() end },
-    { "text size medium", function() setting("text_size", "medium") plugin():showHome() end },
+    { "home refresh (pinned, recent, status)", function() plugin():showHome() homeFits() end },
+    { "home: more books being read", function()
+        -- Books 001-003 have reading progress (tests/make_library.sh).
+        local ReadHistory = require("readhistory")
+        local now = os.time()
+        for i, f in ipairs({ "/books/shelf3/Book 003.epub", "/books/shelf2/Book 002.epub", "/books/shelf1/Book 001.epub" }) do
+            ReadHistory:addItem(f, now + i)
+        end
+        G_reader_settings:saveSetting("lastfile", "/books/shelf1/Book 001.epub")
+        plugin():showHome()
+        homeFits()
+        local rows = top().more_reading or {}
+        assert(#rows >= 1, "no rows (fit level " .. top().fit.more .. ")")
+        assert(rows[1].file:find("Book 002", 1, true), "order: " .. rows[1].file)
+        if rows[2] then assert(rows[2].file:find("Book 003", 1, true), "order: " .. rows[2].file) end
+    end },
+    { "home: more books being read off", function()
+        setting("home_more_reading", false)
+        plugin():showHome()
+        assert(#(top().more_reading or {}) == 0, "rows shown while off")
+        setting("home_more_reading", true)
+        plugin():showHome()
+    end },
+    { "text size large", function() setting("text_size", "large") plugin():showHome() homeFits() end },
+    { "text size small", function() setting("text_size", "small") plugin():showHome() homeFits() end },
+    { "text size medium", function() setting("text_size", "medium") plugin():showHome() homeFits() end },
     { "settings menu", function() plugin():showSettings() end },
     { "close settings", closeTop },
     { "send book screen", function() plugin():showTransfer() assert(top().name == "kindleui_transfer") end, 3 },

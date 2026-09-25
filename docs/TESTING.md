@@ -44,7 +44,11 @@ drives the plugin through its own functions:
 - Library grid: page turns, filter, search, Prepare all covers, options;
 - list view and sorting;
 - Installed Plugins: opening a plugin's menu, pinning;
-- Home refresh with pinned plugins and Recently added, at all three text sizes;
+- Home refresh with pinned plugins and Recently added, at all three text sizes,
+  each time checking that Home fits the screen (the log shows which optional
+  parts were kept);
+- other books being read on Home (reading history filled by the patch), in
+  history order, and switched off;
 - Settings;
 - Send Book, including New Code;
 - Send Plugin, and Undo with nothing to undo.

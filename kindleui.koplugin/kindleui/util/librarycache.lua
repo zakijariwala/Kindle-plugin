@@ -157,14 +157,16 @@ function Cache.getEntry(ui, path)
 end
 
 --- The `n` most recently added books known to the cache (newest file time
--- first), skipping `exclude` and files that no longer exist. No folder scan:
+-- first), skipping `exclude` (a path, or a set of paths) and files that no
+-- longer exist. No folder scan:
 -- books copied over USB show up once My Library has been opened.
 -- @treturn table array of { path, entry }
 function Cache.recent(n, exclude)
     Cache.load()
+    if type(exclude) ~= "table" then exclude = exclude and { [exclude] = true } or {} end
     local list = {}
     for path, e in pairs(Cache.entries) do
-        if path ~= exclude and e.mtime then table.insert(list, { path = path, entry = e }) end
+        if not exclude[path] and e.mtime then table.insert(list, { path = path, entry = e }) end
     end
     table.sort(list, function(a, b) return a.entry.mtime > b.entry.mtime end)
     local out = {}

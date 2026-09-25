@@ -32,7 +32,7 @@ Last updated: 2026-09-25. Branch: `claude/kindle-plugin-handoff-wndhwa` of `zaki
   - a read-only folder is refused before the upload starts.
 - Self-updater: GitHub → zip → staging → compile check → swap, with its own TLS peer verification.
 - Unit tests: `tests/run.sh`, all passing (including `test_plugininstaller.lua`).
-- Emulator smoke test: `tests/e2e/smoke.sh`, 35 steps, passing.
+- Emulator smoke test: `tests/e2e/smoke.sh`, 37 steps, passing.
 - **Install plugin from phone (ROADMAP #21):**
   - `util/pluginzip.lua` (pure zip analysis) and `util/plugininstaller.lua`
     (stage → compile check → swap; a replaced version is kept as
@@ -50,9 +50,16 @@ Last updated: 2026-09-25. Branch: `claude/kindle-plugin-handoff-wndhwa` of `zaki
     entries it has already iterated over, so `install()` iterates the zip
     once first. The unit-test fake now behaves the same way.
 
+- **Other books being read on Home (ROADMAP #12):** up to two rows (title
+  and %) under the Continue Reading card, from KOReader's reading history,
+  finished books left out; Settings → Library toggle `home_more_reading`.
+  Home now fits itself to the screen (`Home.FIT_LEVELS`): compact spacing
+  first, then fewer optional parts. Before this, Home at large text with
+  pinned plugins was taller than the screen (Settings cut off); the smoke
+  test now checks the fit at every text size.
+
 ## Next, in ranked order (see docs/ROADMAP.md)
 
-- #12 last 2–3 reading books on Home
 - #13 cover hold menu
 - #14 collections
 - #15 multi-select batch actions (delete, and so on)
@@ -62,7 +69,7 @@ Last updated: 2026-09-25. Branch: `claude/kindle-plugin-handoff-wndhwa` of `zaki
 - #19 send into collection
 - #20 landscape Home
 
-ROADMAP housekeeping is done: #9–11 and #21 are marked ✅, #12 is 🔜.
+ROADMAP: #9–12 and #21 are marked ✅, #13 is 🔜.
 
 ## Working notes
 

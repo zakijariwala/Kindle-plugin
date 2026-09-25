@@ -19,6 +19,7 @@ local DEFAULTS = {
     library_view = "covers",       -- "covers" | "list"
     library_filter = "all",        -- "all" | "unread" | "reading" | "finished"
     home_recent = true,            -- "Recently added" row on Home
+    home_more_reading = true,      -- up to 2 more books being read, under Continue Reading
     text_size = "medium",          -- "small" | "medium" | "large" (Home, Library, Send Book)
     pinned_plugins = nil,          -- plugin names pinned to Home (max 4); nil = none
     library_max_books = 2000,      -- safety cap for the library scan

@@ -5,7 +5,8 @@ shell on top of KOReader:
 
 ```
 Home
- ├── Continue Reading   (cover · title · author · progress → opens the book)
+ ├── Continue Reading   (cover · title · author · progress → opens the book,
+ │                       plus up to two more books you are reading)
  ├── My Library         (cover grid like a Kindle, or a list; sort, refresh)
  ├── + Send Book        (phone → Kindle over the phone's hotspot, via QR code;
  │                       several books at once)

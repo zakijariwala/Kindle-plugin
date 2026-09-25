@@ -25,8 +25,8 @@ checked in the KOReader emulator before the next.
 | 9 | "Recently added" row on Home | small | ✅ |
 | 10 | Faster e-ink page turns in the grid | small (tuning needs a device) | ✅ |
 | 11 | Prepare all covers now | small (reuses the extractor) | ✅ |
-| 12 | Last 2–3 books you're reading on Home | medium | 🔜 |
-| 13 | Hold menu on a cover: mark read/unread, remove from Continue Reading, delete, details | medium | |
+| 12 | Last 2–3 books you're reading on Home | medium | ✅ |
+| 13 | Hold menu on a cover: mark read/unread, remove from Continue Reading, delete, details | medium | 🔜 |
 | 14 | Collections (KOReader's own) as a Library filter | medium | |
 | 15 | Multi-select and batch actions (Library + Installed Plugins) | medium | |
 | 16 | Series grouping | medium | |
@@ -90,7 +90,7 @@ ever written into the plugins folder:
 | 💡 | **Quick settings bar** (Kindle's swipe-down panel): frontlight, warmth, night mode, Wi-Fi, sleep | Swipe down on Home (or a small ⚙ row) opens a compact panel built from KOReader's own actions (`FrontLightWidget`, `ToggleNightMode`, NetworkMgr). | Cheap; built on demand. |
 | ✅ | **Status line**: battery %, Wi-Fi on/off, time | Read once when Home is shown or refreshed. **No clock timer**, so the time is "as of when Home was drawn". | Cheap: a few sysfs reads per Home open. |
 | ✅ | **Recently added** row (last 3 books received or copied) | Taken from the library cache (sorted by file time). Covers are already cached. | Cheap. |
-| 💡 | **More than one "currently reading"** (last 2–3 books) | From KOReader's reading history; covers from the cache. | Cheap. |
+| ✅ | **More than one "currently reading"** (last 2–3 books) | Under the Continue Reading card, up to two more books from KOReader's reading history (newest first, finished books left out) as one-line rows: title and %. Tap to open. Settings → Library → *Show other books being read on Home*. Home fits itself to the screen: it first tightens spacing and shrinks covers, then drops the second row, then *Recently added*, then the last row; the nav buttons and pinned plugins always stay. | Cheap: the history list is in memory; one `stat()` pair per row (sidecar re-read only when it changed). |
 | 💡 | **Time left in chapter/book** on the Continue Reading card | Only if KOReader's Statistics plugin is enabled (its data already exists); read one small query when Home opens. | Low, and optional (off if Statistics is disabled). |
 
 ## Library

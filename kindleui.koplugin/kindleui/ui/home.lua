@@ -1,7 +1,8 @@
 --[[--
 The Kindle-like Home screen.
 
-Exactly five things are offered: Continue Reading, My Library, Send Book,
+Exactly five things are offered: Continue Reading (the last book as a card,
+plus up to two more books being read as short rows), My Library, Send Book,
 Installed Plugins and Settings. It is a static, full-screen widget shown on
 top of KOReader's file browser: no timers, no animation, nothing running
 while it is displayed. Closing it (Back key) simply reveals the file browser.
@@ -99,7 +100,7 @@ function Home:_continueReading(inner_w)
     local pad = Size.padding.large
     local border = Size.border.thick
     local content_w = inner_w - 2 * (pad + border)
-    local cover_h = Screen:scaleBySize(140)
+    local cover_h = self:_coverH(140)
     local cover_w = math.floor(cover_h * 2 / 3)
     local row = HorizontalGroup:new{ align = "top" }
 
@@ -172,13 +173,46 @@ function Home:_continueReading(inner_w)
     return card, card
 end
 
+-- Optional parts, dropped step by step when Home does not fit the screen
+-- (small screens, large text, pinned plugins). The nav buttons always stay.
+-- `compact` tightens spacing and shrinks the covers first.
+Home.FIT_LEVELS = {
+    { more = 2, recent = true },
+    { more = 2, recent = true, compact = true },
+    { more = 1, recent = true, compact = true },
+    { more = 1, recent = false, compact = true },
+    { more = 0, recent = false, compact = true },
+}
+
+-- A vertical gap (scaled), halved in compact mode.
+function Home:_gap(n)
+    return Screen:scaleBySize(self.compact and math.floor(n / 2) or n)
+end
+
+-- A cover height (scaled), 80% in compact mode.
+function Home:_coverH(n)
+    return Screen:scaleBySize(self.compact and math.floor(n * 0.8) or n)
+end
+
 function Home:build()
+    for i, fit in ipairs(Home.FIT_LEVELS) do
+        local h = self:_build(fit)
+        self.fit, self.used_height = fit, h
+        if h <= self.dimen.h or i == #Home.FIT_LEVELS then break end
+    end
+    self:moveFocusTo(1, 1, FocusManager.FOCUS_ONLY_ON_NT)
+end
+
+-- Builds Home with the given optional parts; returns its height.
+function Home:_build(fit)
+    self.compact = fit.compact
     self:_freeCover()
     self.pending_extract = nil
     self.extract_started = nil
     local w = self.dimen.w
     local margin = Common.SIDE_MARGIN
     local inner_w = w - 2 * margin
+    local padding_top = self:_gap(30)
 
     local vgroup = VerticalGroup:new{ align = "left" }
     local function add(widget) table.insert(vgroup, widget) end
@@ -197,15 +231,16 @@ function Home:build()
     })
     space(Size.span.vertical_large * 2)
     add(Common.line(inner_w, true))
-    space(Screen:scaleBySize(22))
+    space(self:_gap(22))
 
     add(Common.label(_("Continue Reading"), inner_w))
-    space(Screen:scaleBySize(10))
+    space(self:_gap(10))
     local continue_widget, continue_focus = self:_continueReading(inner_w)
     add(continue_widget)
     self.layout = { { continue_focus } }
-    self:_recentlyAdded(add, space, inner_w)
-    space(Screen:scaleBySize(34))
+    local shown = self:_moreReading(add, space, inner_w, fit.more)
+    if fit.recent then self:_recentlyAdded(add, space, inner_w, shown) end
+    space(self:_gap(34))
 
     local nav = {
         { _("My Library"), function() self.plugin:showLibrary() end },
@@ -222,7 +257,7 @@ function Home:build()
             align = "left",
             bordersize = 0,
             padding_h = 0,
-            padding_v = Screen:scaleBySize(18),
+            padding_v = self:_gap(18) + (self.compact and Screen:scaleBySize(3) or 0),
             text_font_face = "cfont",
             text_font_size = Common.fs(24),
             text_font_bold = false,
@@ -241,23 +276,78 @@ function Home:build()
         padding = 0,
         padding_left = margin,
         padding_right = margin,
-        padding_top = Screen:scaleBySize(30),
+        padding_top = padding_top,
         background = Blitbuffer.COLOR_WHITE,
         vgroup,
     }
-    self:moveFocusTo(1, 1, FocusManager.FOCUS_ONLY_ON_NT)
+    return padding_top + vgroup:getSize().h
+end
+
+
+-- Other books being read (KOReader's reading history, newest first, not
+-- finished), as one-line rows under the Continue Reading card: title on the
+-- left, progress on the right. Returns the set of books shown on Home so far.
+function Home:_moreReading(add, space, inner_w, max_rows)
+    local shown = {}
+    local last = Books.lastFile()
+    if last then shown[last] = true end
+    self.more_reading = {}
+    if not last or max_rows == 0 or Config.get("home_more_reading") == false then return shown end
+    -- a few extra candidates, since finished books are skipped
+    for __, file in ipairs(Books.recentlyRead(max_rows + 4, shown)) do
+        if #self.more_reading >= max_rows then break end
+        local entry = Cache.getEntry(self.plugin.ui, file)
+        if entry and entry.status ~= "complete" then
+            table.insert(self.more_reading, { file = file, entry = entry })
+        end
+    end
+    if #self.more_reading == 0 then return shown end
+    space(self:_gap(6))
+    local pad_v = self:_gap(14)
+    -- Room for Tappable's focus border (devices with keys).
+    local edge = Size.border.thick
+    local row_w = inner_w - 2 * edge
+    for __, it in ipairs(self.more_reading) do
+        shown[it.file] = true
+        local pct = it.entry.percent and string.format("%d%%", math.floor(it.entry.percent * 100 + 0.5))
+        local pct_widget = pct and TextWidget:new{ text = pct, face = Common.face("small") }
+        local pct_w = pct_widget and (pct_widget:getSize().w + Screen:scaleBySize(16)) or 0
+        local title = TextWidget:new{
+            text = it.entry.title or filemanagerutil.splitFileNameType(it.file),
+            face = Common.face("body"),
+            max_width = row_w - pct_w,
+        }
+        local row_h = title:getSize().h + 2 * pad_v
+        local overlap = OverlapGroup:new{
+            dimen = Geom:new{ w = row_w, h = row_h },
+            LeftContainer:new{ dimen = Geom:new{ w = row_w, h = row_h }, title },
+        }
+        if pct_widget then
+            table.insert(overlap, RightContainer:new{ dimen = Geom:new{ w = row_w, h = row_h }, pct_widget })
+        end
+        local file = it.file
+        local row = Common.Tappable:new{
+            callback = function() self.plugin:openBook(file) end,
+            FrameContainer:new{ bordersize = 0, padding = edge, overlap },
+        }
+        add(row)
+        add(Common.line(inner_w))
+        table.insert(self.layout, { row })
+    end
+    return shown
 end
 
 -- "Recently added": the 3 newest books, as small covers. From the library
--- cache only (no folder scan), so Home stays fast.
-function Home:_recentlyAdded(add, space, inner_w)
+-- cache only (no folder scan), so Home stays fast. Books already shown under
+-- Continue Reading (`shown`) are skipped.
+function Home:_recentlyAdded(add, space, inner_w, shown)
     if Config.get("home_recent") == false then return end
-    local items = Cache.recent(3, Books.lastFile())
+    local items = Cache.recent(3, shown)
     if #items == 0 then return end
-    space(Screen:scaleBySize(22))
+    space(self:_gap(22))
     add(Common.label(_("Recently added"), inner_w))
-    space(Screen:scaleBySize(10))
-    local h = Screen:scaleBySize(120)
+    space(self:_gap(10))
+    local h = self:_coverH(120)
     local w = math.floor(h * 2 / 3)
     local gap = Screen:scaleBySize(16)
     local row = HorizontalGroup:new{ align = "top" }
@@ -325,9 +415,9 @@ function Home:_pinnedPlugins(add, space, inner_w)
         if entry and not entry.disabled then table.insert(entries, entry) end
     end
     if #entries == 0 then return end -- removed or disabled since: just don't show
-    space(Screen:scaleBySize(26))
+    space(self:_gap(26))
     add(Common.label(_("Pinned plugins"), inner_w))
-    space(Screen:scaleBySize(10))
+    space(self:_gap(10))
     local gap = Screen:scaleBySize(14)
     local btn_w = math.floor((inner_w - gap) / 2)
     for i = 1, #entries, 2 do
@@ -343,7 +433,7 @@ function Home:_pinnedPlugins(add, space, inner_w)
                 text_font_size = Common.fs(19),
                 text_font_bold = false,
                 radius = Size.radius.button,
-                padding_v = Screen:scaleBySize(12),
+                padding_v = self:_gap(12) + (self.compact and Screen:scaleBySize(2) or 0),
                 show_parent = self,
                 callback = function() Plugins.open(entry) end,
                 hold_callback = function()
