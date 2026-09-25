@@ -188,7 +188,7 @@ end
 
 function KindleUI:showSettings()
     local Settings = require("kindleui/ui/settings")
-    Common.showTouchMenu(Settings.build(self), "appbar.settings")
+    Common.showTouchMenu(Settings.build(self), "appbar.settings", function() self:onChildClosed() end)
 end
 
 function KindleUI:showTransfer()

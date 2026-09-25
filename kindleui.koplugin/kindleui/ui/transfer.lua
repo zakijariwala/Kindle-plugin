@@ -225,7 +225,7 @@ function TransferScreen:_button(label, callback, width)
         callback = callback,
         width = width,
         text_font_face = "cfont",
-        text_font_size = 22,
+        text_font_size = Common.fs(22),
         radius = Size.radius.button,
         padding_v = Screen:scaleBySize(12),
         show_parent = self,

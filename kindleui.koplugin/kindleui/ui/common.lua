@@ -21,14 +21,31 @@ local Common = {}
 
 Common.SIDE_MARGIN = Screen:scaleBySize(28)
 
+-- Settings → Library → Text size (Home, Library, Send Book).
+Common.TEXT_SIZES = {
+    { id = "small", factor = 0.85 },
+    { id = "medium", factor = 1.0 },
+    { id = "large", factor = 1.2 },
+}
+
+--- Scales a font size by the chosen text size.
+function Common.fs(size)
+    local id = require("kindleui/config").get("text_size")
+    for __, t in ipairs(Common.TEXT_SIZES) do
+        if t.id == id then return math.floor(size * t.factor + 0.5) end
+    end
+    return size
+end
+
 function Common.face(kind)
-    if kind == "title" then return Font:getFace("tfont", 26) end
-    if kind == "nav" then return Font:getFace("cfont", 24) end
-    if kind == "book_title" then return Font:getFace("tfont", 21) end
-    if kind == "body" then return Font:getFace("cfont", 19) end
-    if kind == "small" then return Font:getFace("cfont", 16) end
-    if kind == "label" then return Font:getFace("cfont", 17) end
-    return Font:getFace("cfont", 20)
+    local fs = Common.fs
+    if kind == "title" then return Font:getFace("tfont", fs(26)) end
+    if kind == "nav" then return Font:getFace("cfont", fs(24)) end
+    if kind == "book_title" then return Font:getFace("tfont", fs(21)) end
+    if kind == "body" then return Font:getFace("cfont", fs(19)) end
+    if kind == "small" then return Font:getFace("cfont", fs(16)) end
+    if kind == "label" then return Font:getFace("cfont", fs(17)) end
+    return Font:getFace("cfont", fs(20))
 end
 
 function Common.line(width, thick)

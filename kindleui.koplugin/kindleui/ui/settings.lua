@@ -69,7 +69,25 @@ function Settings.build(plugin)
             callback = function() Config.set("library_view", v.id) end,
         })
     end
+    local size_names = { small = _("Small"), medium = _("Medium"), large = _("Large") }
+    local size_items = {}
+    for __, t in ipairs(require("kindleui/ui/common").TEXT_SIZES) do
+        table.insert(size_items, {
+            text = size_names[t.id],
+            radio = true,
+            checked_func = function() return Config.get("text_size") == t.id end,
+            callback = function()
+                Config.set("text_size", t.id)
+                plugin:onLibraryChanged() -- Home is rebuilt when Settings closes
+            end,
+        })
+    end
     local library = {
+        {
+            text = _("Text size"),
+            help_text = _("Text size of the Home screen, My Library and Send Book. Books keep their own font settings."),
+            sub_item_table = size_items,
+        },
         {
             text = _("View"),
             sub_item_table = view_items,

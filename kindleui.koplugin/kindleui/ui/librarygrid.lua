@@ -76,7 +76,7 @@ function LibraryGrid:computeLayout()
     self.rows = portrait and 3 or 2
     self.gap = Screen:scaleBySize(14)
     self.inner_w = w - 2 * margin
-    self.label_face = Font:getFace("cfont", 15)
+    self.label_face = Font:getFace("cfont", Common.fs(15))
     self.label_h = self.label_face.size * 2
     self.title_bar = TitleBar:new{
         width = w,
@@ -110,7 +110,7 @@ function LibraryGrid:textCover(book)
     local vg = VerticalGroup:new{ align = "center" }
     table.insert(vg, TextBoxWidget:new{
         text = book.title or "",
-        face = Font:getFace("tfont", 17),
+        face = Font:getFace("tfont", Common.fs(17)),
         width = self.cover_w - 2 * pad,
         alignment = "center",
         height = math.floor(self.cover_h * 0.6),
@@ -121,7 +121,7 @@ function LibraryGrid:textCover(book)
         table.insert(vg, VerticalSpan:new{ width = pad })
         table.insert(vg, TextBoxWidget:new{
             text = book.authors,
-            face = Font:getFace("cfont", 14),
+            face = Font:getFace("cfont", Common.fs(14)),
             width = self.cover_w - 2 * pad,
             alignment = "center",
             height = math.floor(self.cover_h * 0.25),
