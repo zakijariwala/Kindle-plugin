@@ -92,12 +92,16 @@ Last updated: 2026-09-25. Branch: `claude/kindle-plugin-handoff-wndhwa` of `zaki
   from `statistics.sqlite3` (by partial MD5, read-only), estimate tested in
   `test_readingtime.lua`; Settings → Library toggle `home_time_left`.
 
+- **Send into a collection (ROADMAP #19):** phone page "Add to collection"
+  (positions, not names, go back to the Kindle); `ui/transfer.lua` adds each
+  book with `ReadCollection:addItem` and writes at once. Checked end to end
+  with headless Chromium (`COLLECTION="To read" node tests/e2e/phone.js …`).
+
 ## Next, in ranked order (see docs/ROADMAP.md)
 
-- #19 send into collection
 - #20 landscape Home
 
-ROADMAP: #9–18 and #21 are marked ✅, #19 is 🔜.
+ROADMAP: #9–19 and #21 are marked ✅, #20 is 🔜.
 
 ## Working notes
 

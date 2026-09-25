@@ -67,11 +67,13 @@ Session.PLUGIN_MSG = {
 --   max_bytes     (int)      largest accepted upload
 --   firewall      (table)    optional { open(port), close(port) }
 --   callbacks     (table)    onProgress(filename, received, total, index, count),
---                            onReceived(path, filename, index, count),
+--                            onReceived(path, filename, index, count, collection),
 --                            onFailed(reason, filename), onFinished(paths),
 --                            onExpired(), onStopped(reason)
 --   kind          (string)   "books" (default) or "plugin" (page wording, phone messages)
 --   max_files     (int)      optional: uploads accepted per session
+--   collections   (table)    optional { { name, title }, ... }: offered on the phone page;
+--                            onReceived gets the chosen collection's name
 --   logger        (table)    optional KOReader logger
 --   random_source (string)   optional, tests only
 function Session:new(o)
@@ -261,6 +263,7 @@ function Session:onHeaders(req)
                 formats = self.format_list,
                 max_mb = math.floor(self.max_bytes / (1024 * 1024)),
                 kind = self.kind,
+                collections = self.collections,
             },
         }
     end
@@ -327,6 +330,10 @@ function Session:onHeaders(req)
     local index = tonumber(req.query.index)
     local count = tonumber(req.query.count)
     job.index, job.count = index, count
+    -- A position in our own list; anything else is ignored.
+    local pick = tonumber(req.query.collection)
+    local coll = pick and self.collections and self.collections[pick]
+    job.collection = coll and coll.name or nil
     self:_log("info", "upload started:", len, "bytes, type", job.ext,
         index and count and string.format("(%d of %d)", index, count) or "")
     self:_emit("onProgress", filename, 0, len, index, count)
@@ -361,7 +368,7 @@ function Session:onUploadDone(req, job)
     end
     table.insert(self.received, path)
     self:_log("info", "upload complete, stored in destination directory")
-    self:_emit("onReceived", path, job.filename, job.index, job.count)
+    self:_emit("onReceived", path, job.filename, job.index, job.count, job.collection)
     return text(200, self:_msg("received"))
 end
 

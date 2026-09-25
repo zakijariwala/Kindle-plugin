@@ -1,6 +1,7 @@
 // Plays the phone: opens the Send Book URL in headless Chromium (phone-sized
 // viewport), selects files, taps Upload and reports what the page says.
 //   node tests/e2e/phone.js <url> <out.png> <file> [file ...]
+//   env COLLECTION=<label>: pick that entry of "Add to collection" first
 // Needs `npm install playwright` (uses the pre-installed Chromium).
 const { chromium, devices } = require("playwright");
 
@@ -11,6 +12,10 @@ const { chromium, devices } = require("playwright");
     const t0 = Date.now();
     const resp = await page.goto(url);
     console.log("page:", resp.status(), await page.title(), `${Date.now() - t0} ms`);
+    if (process.env.COLLECTION) {
+        await page.selectOption("#coll", { label: process.env.COLLECTION });
+        console.log("collection:", process.env.COLLECTION);
+    }
     await page.setInputFiles("#file", files);
     console.log("selected:", await page.textContent("#name"));
     const t1 = Date.now();

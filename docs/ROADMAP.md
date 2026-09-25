@@ -32,8 +32,8 @@ checked in the KOReader emulator before the next.
 | 16 | Series grouping | medium | ✅ |
 | 17 | Quick settings panel (frontlight, warmth, night mode, Wi-Fi) | medium | ✅ |
 | 18 | Time left in book (only with the Statistics plugin) | medium | ✅ |
-| 19 | Send Book into a collection | medium (after 14) | 🔜 |
-| 20 | Landscape layout for Home | medium | |
+| 19 | Send Book into a collection | medium (after 14) | ✅ |
+| 20 | Landscape layout for Home | medium | 🔜 |
 | 21 | Install plugin from phone | large | ✅ |
 
 Dropped after a closer look:
@@ -110,7 +110,7 @@ ever written into the plugins folder:
 
 | Status | Feature | How | Cost |
 | --- | --- | --- | --- |
-| 💡 | **Send into a collection** | The phone page shows your collections; received books are added to the chosen one. | Cheap. |
+| ✅ | **Send into a collection** | When KOReader has collections, the phone page shows *Add to collection* (None by default); every book of that upload is added to the chosen one on arrival. The page sends only the option's position, which the Kindle maps back to its own list (unknown values are ignored); names are HTML-escaped. Not offered for plugin uploads. | Cheap: the list is read once per session. |
 | ✅ | **Transfer speed and time left** on the Kindle screen | Computed from bytes received (already tracked). | Free. |
 | ❌ | **Send from the phone's share menu** | The page can be added to the phone's home screen, so sending needs one tap after scanning once per session. | None on the Kindle. |
 

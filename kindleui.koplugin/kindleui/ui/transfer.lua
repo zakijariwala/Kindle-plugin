@@ -123,8 +123,8 @@ function TransferScreen:startSession()
         onFailed = function(reason, filename)
             self:setState("failed", { reason = reason, filename = filename })
         end,
-        onReceived = function(path, filename)
-            self:onBookReceived(path, filename)
+        onReceived = function(path, filename, index, count, collection)
+            self:onBookReceived(path, filename, collection)
         end,
         onFinished = function()
             self:onFinished()
@@ -162,13 +162,14 @@ function TransferScreen:stopSession(reason)
 end
 
 -- One book stored (the phone may send more in the same session).
-function TransferScreen:onBookReceived(path, filename)
+function TransferScreen:onBookReceived(path, filename, collection)
     if self.kind == "plugin" then
         self.plugin_zip = { path = path, filename = filename }
         self:setState("waiting")
         return
     end
     Books.refreshLibrary(path)
+    if collection then self:addToCollection(path, collection) end
     local book = { path = path, title = filemanagerutil.splitFileNameType(path) }
     table.insert(self.books, book)
     -- Extract title, author and cover now (in a child process), while the
@@ -197,6 +198,17 @@ function TransferScreen:onBookReceived(path, filename)
     end
     if self.plugin then self.plugin:onLibraryChanged() end
     self:setState("waiting")
+end
+
+-- The phone chose a collection: add the book to it (KOReader's collections).
+function TransferScreen:addToCollection(path, collection)
+    local ok, err = pcall(function()
+        local ReadCollection = require("readcollection")
+        if not ReadCollection.coll[collection] then return end -- deleted meanwhile
+        ReadCollection:addItem(path, collection)
+        ReadCollection:write({ [collection] = true })
+    end)
+    if not ok then logger.warn("KindleUI transfer: could not add to collection:", err) end
 end
 
 -- Plugin mode: the .zip is here; close and let the user review it.

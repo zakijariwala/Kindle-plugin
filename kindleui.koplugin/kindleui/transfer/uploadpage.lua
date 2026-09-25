@@ -41,6 +41,7 @@ button:disabled{background:#bbb}
 .bar{height:14px;border:2px solid #111;border-radius:7px;overflow:hidden;margin:18px 0 6px;display:none}
 .bar div{height:100%;width:0;background:#111}
 #status{text-align:center;min-height:1.4em;margin-top:10px}
+.coll{display:block;margin:16px 0 0;text-align:center}.coll select{font:inherit;margin-left:6px;max-width:60%}
 #list{list-style:none;padding:0;margin:14px 0 0;font-size:15px}#list li{padding:4px 0;word-break:break-word}.bad{color:#a00}
 .ok{font-size:19px;font-weight:700}
 .note{color:#555;font-size:14px;margin-top:32px}
@@ -53,7 +54,7 @@ button:disabled{background:#bbb}
 <label class="pick" for="file">{{PICK}}</label>
 <input id="file" type="file"{{MULTIPLE}}{{ACCEPT}}>
 <div id="name"></div>
-<button id="send" disabled>Upload</button>
+{{COLLECTIONS}}<button id="send" disabled>Upload</button>
 </div>
 <div class="bar" id="bar"><div id="fill"></div></div>
 <div id="status" role="status" aria-live="polite"></div>
@@ -81,14 +82,15 @@ function finish(ok,bad,dead){
 b.onclick=function(){
   var files=[],i;for(i=0;i<f.files.length;i++){files.push(f.files[i]);}
   if(!files.length){return;}
-  b.disabled=true;f.disabled=true;list.textContent="";bar.style.display="block";
+  b.disabled=true;f.disabled=true;if(document.getElementById("coll")){document.getElementById("coll").disabled=true;}list.textContent="";bar.style.display="block";
   var ok=0,bad=0,idx=0;
   function next(){
     if(idx>=files.length){finish(ok,bad,false);return;}
     var x=files[idx],pos=idx+1,label=(files.length>1?L.item+pos+" of "+files.length+": ":"")+x.name;idx++;
     fill.style.width="0";say("Uploading "+label+"... 0%");
     var r=new XMLHttpRequest();
-    r.open("POST",BASE+"/upload?name="+encodeURIComponent(x.name)+"&index="+pos+"&count="+files.length,true);
+    var co=document.getElementById("coll"),cq=co&&co.value?"&collection="+co.value:"";
+    r.open("POST",BASE+"/upload?name="+encodeURIComponent(x.name)+"&index="+pos+"&count="+files.length+cq,true);
     r.setRequestHeader("Content-Type","application/octet-stream");
     r.upload.onprogress=function(e){if(e.lengthComputable){var p=Math.floor(e.loaded*100/e.total);fill.style.width=p+"%";say("Uploading "+label+"... "+p+"%");}};
     r.onload=function(){
@@ -143,9 +145,20 @@ UploadPage.KINDS = {
     },
 }
 
+-- "Add to collection" picker (books only). Option values are list positions,
+-- never names: the Kindle maps them back to its own list.
+local function collectionPicker(collections)
+    if not collections or #collections == 0 then return "" end
+    local opts = { '<option value="">None</option>' }
+    for i, c in ipairs(collections) do
+        table.insert(opts, string.format('<option value="%d">%s</option>', i, htmlEscape(c.title or c.name)))
+    end
+    return '<label class="coll">Add to collection<select id="coll">' .. table.concat(opts) .. "</select></label>\n"
+end
+
 --- Renders the page.
 -- @param o { base_path = "/<token>", formats = "EPUB, PDF, ...", max_mb = 500,
---            kind = "books" | "plugin" }
+--            kind = "books" | "plugin", collections = { { name, title }, ... } }
 function UploadPage.render(o)
     local path = tostring(o.base_path)
     -- The path is ours (hex token) but never let it break out of the JS string.
@@ -166,6 +179,7 @@ function UploadPage.render(o)
         MULTIPLE = kind.multiple and " multiple" or "",
         ACCEPT = kind.accept and (' accept="' .. htmlEscape(kind.accept) .. '"') or "",
         NOTE = note,
+        COLLECTIONS = (o.kind or "books") == "books" and collectionPicker(o.collections) or "",
         STRINGS = "{" .. table.concat(strings, ",") .. "}",
     }
     return (TEMPLATE:gsub("{{([%u_]+)}}", function(key) return values[key] end))

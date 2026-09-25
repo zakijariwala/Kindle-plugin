@@ -62,6 +62,11 @@ function LocalHttp:start(info, callbacks)
         logger = logger,
     }
     session.format_list = Books.formatList()
+    if not plugin then
+        -- KOReader's collections, offered on the phone page.
+        local ok, list = pcall(function() return require("kindleui/ui/library").collections() end)
+        session.collections = ok and list or nil
+    end
     local ok, err = session:start()
     if not ok then
         return nil, err

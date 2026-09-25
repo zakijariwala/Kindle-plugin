@@ -72,7 +72,8 @@ management**. To uninstall, delete the folder.
 3. Tap **+ Send Book**. A QR code and the Kindle's local address appear.
 4. Scan the QR code with the same phone. The browser opens *Send to Kindle*.
 5. Tap **Choose Books**, pick one or several EPUB/PDF/… files, tap **Upload**.
-   The phone shows each book's result.
+   The phone shows each book's result. If you use KOReader collections, you
+   can pick one under **Add to collection** first.
 6. The Kindle shows **✓ Book received** (or *N books received*) with **Read
    Now** / **Open Library**, **Send More** and **Done**. The books are already
    in the library, with their covers, and the transfer service has shut down.
