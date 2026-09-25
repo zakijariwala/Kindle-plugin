@@ -32,7 +32,7 @@ Last updated: 2026-09-25. Branch: `claude/kindle-plugin-handoff-wndhwa` of `zaki
   - a read-only folder is refused before the upload starts.
 - Self-updater: GitHub → zip → staging → compile check → swap, with its own TLS peer verification.
 - Unit tests: `tests/run.sh`, all passing (including `test_plugininstaller.lua`).
-- Emulator smoke test: `tests/e2e/smoke.sh`, 52 steps, passing.
+- Emulator smoke test: `tests/e2e/smoke.sh`, 53 steps, passing.
 - **Install plugin from phone (ROADMAP #21):**
   - `util/pluginzip.lua` (pure zip analysis) and `util/plugininstaller.lua`
     (stage → compile check → swap; a replaced version is kept as
@@ -83,14 +83,18 @@ Last updated: 2026-09-25. Branch: `claude/kindle-plugin-handoff-wndhwa` of `zaki
   emulator: series extracted from never-opened EPUBs (calibre:series), and
   the upgrade of a cache without series.
 
+- **Quick settings (ROADMAP #17):** `ui/quicksettings.lua`, from Home (swipe
+  down, or tap the status line ▾): KOReader's own events. The emulator image
+  runs KOReader as a desktop (`KO_MULTIUSER`), so only Night mode is live
+  there; frontlight, Wi-Fi and sleep need a device check.
+
 ## Next, in ranked order (see docs/ROADMAP.md)
 
-- #17 quick settings
 - #18 time left
 - #19 send into collection
 - #20 landscape Home
 
-ROADMAP: #9–16 and #21 are marked ✅, #17 is 🔜.
+ROADMAP: #9–17 and #21 are marked ✅, #18 is 🔜.
 
 ## Working notes
 
@@ -107,5 +111,5 @@ ROADMAP: #9–16 and #21 are marked ✅, #17 is 🔜.
   - TitleBar needs `subtitle = " "` at creation for `setSubTitle` to work.
 - **Emulator tests that write to the plugins folder** (updater, plugin install)
   use `KO_PLUGINS_DIR`; the default mount holds only this plugin, read-only.
-- **Not verified on a real Kindle:** battery and Wi-Fi status, iptables, lipc, e-ink refresh, plugin installer.
+- **Not verified on a real Kindle:** battery and Wi-Fi status, iptables, lipc, e-ink refresh, plugin installer, quick settings (light, Wi-Fi, sleep).
 - **Repo visibility:** the repo must be public for the updater to work without a token.

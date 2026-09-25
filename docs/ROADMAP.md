@@ -30,8 +30,8 @@ checked in the KOReader emulator before the next.
 | 14 | Collections (KOReader's own) as a Library filter | medium | ✅ |
 | 15 | Multi-select and batch actions (Library + Installed Plugins) | medium | ✅ |
 | 16 | Series grouping | medium | ✅ |
-| 17 | Quick settings panel (frontlight, warmth, night mode, Wi-Fi) | medium | 🔜 |
-| 18 | Time left in book (only with the Statistics plugin) | medium | |
+| 17 | Quick settings panel (frontlight, warmth, night mode, Wi-Fi) | medium | ✅ |
+| 18 | Time left in book (only with the Statistics plugin) | medium | 🔜 |
 | 19 | Send Book into a collection | medium (after 14) | |
 | 20 | Landscape layout for Home | medium | |
 | 21 | Install plugin from phone | large | ✅ |
@@ -87,7 +87,7 @@ ever written into the plugins folder:
 
 | Status | Feature | How | Cost |
 | --- | --- | --- | --- |
-| 💡 | **Quick settings bar** (Kindle's swipe-down panel): frontlight, warmth, night mode, Wi-Fi, sleep | Swipe down on Home (or a small ⚙ row) opens a compact panel built from KOReader's own actions (`FrontLightWidget`, `ToggleNightMode`, NetworkMgr). | Cheap; built on demand. |
+| ✅ | **Quick settings bar** (Kindle's swipe-down panel): frontlight, warmth, night mode, Wi-Fi, sleep | Swipe down on Home, or tap the status line (marked ▾), opens a small panel: **Frontlight…** (KOReader's light dialog, warmth included), **Light on/off**, **Night mode**, **Wi-Fi**, **Sleep**. Each sends the same event as KOReader's own gesture action (`ShowFlDialog`, `ToggleFrontlight`, `ToggleNightMode`, `ToggleWifi`, `RequestSuspend`) to the file manager; entries the device lacks are left out. | Cheap; built on demand, nothing runs until tapped. |
 | ✅ | **Status line**: battery %, Wi-Fi on/off, time | Read once when Home is shown or refreshed. **No clock timer**, so the time is "as of when Home was drawn". | Cheap: a few sysfs reads per Home open. |
 | ✅ | **Recently added** row (last 3 books received or copied) | Taken from the library cache (sorted by file time). Covers are already cached. | Cheap. |
 | ✅ | **More than one "currently reading"** (last 2–3 books) | Under the Continue Reading card, up to two more books from KOReader's reading history (newest first, finished books left out) as one-line rows: title and %. Tap to open. Settings → Library → *Show other books being read on Home*. Home fits itself to the screen: it first tightens spacing and shrinks covers, then drops the second row, then *Recently added*, then the last row; the nav buttons and pinned plugins always stay. | Cheap: the history list is in memory; one `stat()` pair per row (sidecar re-read only when it changed). |

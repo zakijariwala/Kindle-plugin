@@ -23,6 +23,7 @@ local Device = require("device")
 local FocusManager = require("ui/widget/focusmanager")
 local FrameContainer = require("ui/widget/container/framecontainer")
 local Geom = require("ui/geometry")
+local GestureRange = require("ui/gesturerange")
 local HorizontalGroup = require("ui/widget/horizontalgroup")
 local LeftContainer = require("ui/widget/container/leftcontainer")
 local OverlapGroup = require("ui/widget/overlapgroup")
@@ -52,6 +53,10 @@ function Home:init()
     if Device:hasKeys() then
         -- Back leaves the shell and reveals KOReader's file browser (never a dead end).
         self.key_events.Close = { { Device.input.group.Back } }
+    end
+    if Device:isTouchDevice() then
+        -- Swipe down anywhere: quick settings (like a Kindle's top panel).
+        self.ges_events.Swipe = { GestureRange:new{ ges = "swipe", range = self.dimen } }
     end
     self:build()
 end
@@ -221,7 +226,11 @@ function Home:_build(fit)
 
     -- Title on the left, status (time · Wi-Fi · battery) on the right.
     local status = self:_statusText()
-    local status_widget = TextWidget:new{ text = status, face = Common.face("small"), max_width = math.floor(inner_w * 0.6) }
+    -- Tapping the status line also opens quick settings (▾ hints at it).
+    local status_widget = Common.Tappable:new{
+        callback = function() self:showQuickSettings() end,
+        TextWidget:new{ text = status .. "  ▾", face = Common.face("small"), max_width = math.floor(inner_w * 0.6) },
+    }
     local title_widget = TextWidget:new{ text = _("Home"), face = Common.face("title"),
         max_width = inner_w - status_widget:getSize().w - Screen:scaleBySize(10) }
     local row_h = math.max(title_widget:getSize().h, status_widget:getSize().h)
@@ -378,6 +387,19 @@ function Home:_recentlyAdded(add, space, inner_w, shown)
     end
     add(row)
     table.insert(self.layout, layout_row)
+end
+
+function Home:showQuickSettings()
+    require("kindleui/ui/quicksettings").show(self.plugin, function()
+        if UIManager:isWidgetShown(self) then self:refresh() end
+    end)
+end
+
+function Home:onSwipe(__, ges)
+    if ges.direction == "south" then
+        self:showQuickSettings()
+        return true
+    end
 end
 
 --- Hold a book on Home: the book menu; Home is rebuilt after a change.

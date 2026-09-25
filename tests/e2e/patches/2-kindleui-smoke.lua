@@ -256,6 +256,48 @@ local steps = {
         setting("home_more_reading", true)
         plugin():showHome()
     end },
+    { "quick settings: night mode on and off", function()
+        local home = top()
+        local function nightButton()
+            home:showQuickSettings()
+            local dialog = top()
+            assert(dialog.buttons, "no quick settings")
+            for __, row in ipairs(dialog.buttons) do
+                for __, btn in ipairs(row) do
+                    if btn.text:find("Night mode", 1, true) then return btn end
+                end
+            end
+            error("no night mode button")
+        end
+        local before = G_reader_settings:isTrue("night_mode")
+        nightButton().callback()
+        assert(G_reader_settings:isTrue("night_mode") ~= before, "night mode not toggled")
+        nightButton().callback()
+        assert(G_reader_settings:isTrue("night_mode") == before, "night mode not restored")
+        home:onSwipe(nil, { direction = "south" })
+        local panel = top()
+        local labels = {}
+        for __, row in ipairs(panel.buttons) do for __, btn in ipairs(row) do table.insert(labels, btn.text) end end
+        logger.info("KINDLEUI SMOKE quick settings: " .. table.concat(labels, " | "))
+        UIManager:close(panel)
+        -- The emulator runs KOReader as a desktop (no light, Wi-Fi toggle or
+        -- sleep): pretend it has them, to build the full panel once.
+        local Device = require("device")
+        local saved = { Device.hasFrontlight, Device.hasWifiToggle, Device.canSuspend }
+        local yes = function() return true end
+        Device.hasFrontlight, Device.hasWifiToggle, Device.canSuspend = yes, yes, yes
+        local ok, err = pcall(function()
+            home:showQuickSettings()
+            local full = top()
+            local all = {}
+            for __, r in ipairs(full.buttons) do for __, btn in ipairs(r) do table.insert(all, btn.text) end end
+            logger.info("KINDLEUI SMOKE quick settings (full): " .. table.concat(all, " | "))
+            assert(#all == 5, "expected 5 entries, got " .. #all)
+            UIManager:close(full)
+        end)
+        Device.hasFrontlight, Device.hasWifiToggle, Device.canSuspend = saved[1], saved[2], saved[3]
+        assert(ok, err)
+    end, 3 },
     { "text size large", function() setting("text_size", "large") plugin():showHome() homeFits() end },
     { "text size small", function() setting("text_size", "small") plugin():showHome() homeFits() end },
     { "text size medium", function() setting("text_size", "medium") plugin():showHome() homeFits() end },

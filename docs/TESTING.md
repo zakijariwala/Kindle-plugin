@@ -59,6 +59,9 @@ drives the plugin through its own functions:
 - other books being read on Home (reading history filled by the patch), in
   history order, and switched off; marking one Finished from its hold menu
   (it leaves the rows); removing the Continue Reading book from the history;
+- quick settings: night mode toggled on and off through the panel, the panel
+  opened by a swipe, and (with the device's light/Wi-Fi/sleep flags forced on,
+  since the emulator runs KOReader as a desktop) the full five-entry panel;
 - Settings;
 - Send Book, including New Code;
 - Send Plugin, and Undo with nothing to undo.
