@@ -100,4 +100,30 @@ else
     T.ok(read(plugin .. "/main.lua"):find("new"), "current version untouched")
 end
 
+T.section("startup cleanup of interrupted updates")
+do
+    local pd = T.tmpdir()
+    local sd = T.tmpdir()
+    makePlugin(pd .. "/kindleui.koplugin", "current")
+    makePlugin(pd .. "/.kindleui.koplugin.new", "half-staged")          -- staging left behind
+    makePlugin(pd .. "/.kindleui.koplugin.old", "stale-backup")         -- backup, plugin present
+    makePlugin(pd .. "/.other.koplugin.old", "interrupted-swap")        -- other.koplugin missing
+    makePlugin(pd .. "/SSH.koplugin", "untouched")
+    write(pd .. "/.kindleui.koplugin.new.txt", "not a dir")             -- not our pattern
+    write(sd .. "/kindleui-update.zip", "zip")
+    local res = Updater.cleanupLeftovers(pd, sd)
+    T.eq(res.removed, 3, "staging + stale backup + update zip removed")
+    T.eq(res.restored, 1, "interrupted swap restored")
+    local left = T.listDir(pd)
+    table.sort(left)
+    T.eq(table.concat(left, ","), ".kindleui.koplugin.new.txt,SSH.koplugin,kindleui.koplugin,other.koplugin",
+        "only leftovers touched")
+    T.ok(read(pd .. "/kindleui.koplugin/main.lua"):find("current"), "installed plugin untouched")
+    T.ok(read(pd .. "/other.koplugin/main.lua"):find("interrupted-swap", 1, true), "restored copy in place")
+    T.ok(read(sd .. "/kindleui-update.zip") == nil, "update zip removed")
+    local res2 = Updater.cleanupLeftovers(pd, sd)
+    T.eq(res2.removed + res2.restored, 0, "second run finds nothing")
+    T.eq(Updater.cleanupLeftovers(pd .. "/missing", nil).removed, 0, "missing folder is harmless")
+end
+
 T.done()

@@ -114,6 +114,48 @@ function Updater.swapIn(plugin_dir, staged_dir)
     return true
 end
 
+--- Removes what an interrupted update/install left behind (crash or power
+-- loss mid-way), in the plugins folder `plugins_dir`:
+--   .<name>.koplugin.new  (staging)  → deleted
+--   .<name>.koplugin.old  (backup during a swap) → put back if <name>.koplugin
+--                         is missing (swap interrupted between the two
+--                         renames), deleted otherwise
+-- and the downloaded update zip in `settings_dir`.
+-- Nothing else is touched. Returns a summary table { removed, restored }.
+-- Limitation: if *this* plugin's own folder went missing, this code is not
+-- loaded at all and cannot run; that needs a manual reinstall.
+function Updater.cleanupLeftovers(plugins_dir, settings_dir)
+    local lfs = require("libs/libkoreader-lfs")
+    local result = { removed = 0, restored = 0 }
+    local ok, iter, dir_obj = pcall(lfs.dir, plugins_dir)
+    if ok then
+        local names = {}
+        for name in iter, dir_obj do table.insert(names, name) end
+        for __, name in ipairs(names) do
+            local path = plugins_dir .. "/" .. name
+            local staged_of = name:match("^%.(.+%.koplugin)%.new$")
+            local backup_of = name:match("^%.(.+%.koplugin)%.old$")
+            if staged_of and isDir(path) then
+                purge(path)
+                result.removed = result.removed + 1
+            elseif backup_of and isDir(path) then
+                local target = plugins_dir .. "/" .. backup_of
+                if not isDir(target) and os.rename(path, target) then
+                    result.restored = result.restored + 1
+                    log("warn", "restored", backup_of, "from an interrupted update")
+                else
+                    purge(path)
+                    result.removed = result.removed + 1
+                end
+            end
+        end
+    end
+    if settings_dir and os.remove(settings_dir .. "/kindleui-update.zip") then
+        result.removed = result.removed + 1
+    end
+    return result
+end
+
 --- Checks that a staged copy looks like a complete plugin and compiles.
 function Updater.validateStaged(dir)
     for __, f in ipairs({ "main.lua", "_meta.lua", "kindleui/config.lua", "kindleui/ui/home.lua" }) do

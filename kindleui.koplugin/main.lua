@@ -78,6 +78,15 @@ function KindleUI:init()
             if removed > 0 then
                 logger.info("KindleUI: removed", removed, "stale upload temp file(s)")
             end
+            -- ...and whatever an interrupted update left in the plugins folder.
+            if self.path then
+                local plugins_dir = self.path:match("^(.*)/[^/]+/?$")
+                local DataStorage = require("datastorage")
+                local res = require("kindleui/util/updater").cleanupLeftovers(plugins_dir, DataStorage:getSettingsDir())
+                if res.removed + res.restored > 0 then
+                    logger.info("KindleUI: update leftovers removed", res.removed, "restored", res.restored)
+                end
+            end
         end)
     end
 
