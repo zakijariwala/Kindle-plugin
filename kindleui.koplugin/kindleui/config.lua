@@ -17,6 +17,7 @@ local DEFAULTS = {
     show_on_start = true,          -- present the Home screen when the file browser opens
     library_sort = "recent",       -- "recent" | "title" | "author" | "added"
     library_view = "covers",       -- "covers" | "list"
+    library_filter = "all",        -- "all" | "unread" | "reading" | "finished"
     library_max_books = 2000,      -- safety cap for the library scan
     library_max_depth = 6,         -- folder depth scanned below the home folder
     transfer_method = "local_http",

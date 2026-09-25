@@ -20,6 +20,7 @@ local Perf = require("kindleui/util/perf")
 local UIManager = require("ui/uimanager")
 local ffiUtil = require("ffi/util")
 local _ = require("gettext")
+local T = require("ffi/util").template
 local Screen = Device.screen
 
 local SORTS = {
@@ -27,6 +28,12 @@ local SORTS = {
     { id = "title", text = _("Title") },
     { id = "author", text = _("Author") },
     { id = "added", text = _("Recently added") },
+}
+local FILTERS = {
+    { id = "all", text = _("All") },
+    { id = "unread", text = _("Unread") },
+    { id = "reading", text = _("Reading") },
+    { id = "finished", text = _("Finished") },
 }
 local VIEWS = {
     { id = "covers", text = _("Covers") },
@@ -36,6 +43,7 @@ local VIEWS = {
 local Library = {
     SORTS = SORTS,
     VIEWS = VIEWS,
+    FILTERS = FILTERS,
     -- Remembered for this KOReader session only (not saved to disk).
     session = { grid_page = 1, list_page = 1 },
 }
@@ -81,11 +89,50 @@ function Library.loadBooks(plugin)
     end
     table.sort(books, cmp)
     Cache.save()
+    local shown = Library.applyFilter(books, Config.get("library_filter"))
     Perf.log("library data", t0, {
-        books = stats.books, scan_ms = scan_ms, meta_ms = meta_ms,
+        books = stats.books, shown = #shown, scan_ms = scan_ms, meta_ms = meta_ms,
         sidecar_reads = stats.sidecar_reads, new_entries = stats.new_entries,
     })
-    return books
+    return shown, #books
+end
+
+--- Reading state of a book: "unread" (never opened), "finished", or "reading".
+function Library.readingState(b)
+    if b.status == "complete" then return "finished" end
+    if b.percent or b.status then return "reading" end
+    return "unread"
+end
+
+--- Books matching a filter id ("all" | "unread" | "reading" | "finished").
+function Library.applyFilter(books, filter)
+    if not filter or filter == "all" then return books end
+    local out = {}
+    for __, b in ipairs(books) do
+        if Library.readingState(b) == filter then table.insert(out, b) end
+    end
+    return out
+end
+
+--- Title-bar subtitle, e.g. "150 books" or "12 of 150 · Reading".
+function Library.subtitle(shown, total)
+    local filter = Config.get("library_filter")
+    if filter and filter ~= "all" then
+        for __, f in ipairs(FILTERS) do
+            if f.id == filter then
+                return T(_("%1 of %2 · %3"), shown, total, f.text)
+            end
+        end
+    end
+    return T(_("%1 books"), total)
+end
+
+--- Message for an empty page: no books at all, or none matching the filter.
+function Library.emptyText(total)
+    if total and total > 0 then
+        return _("No books match this filter.\nChange it with the ☰ button (top left).")
+    end
+    return _("No books yet.\nUse Send Book on the Home screen to add one.")
 end
 
 --- Short progress label: "63%", "New" or "Finished".
@@ -128,6 +175,21 @@ function Library.showOptions(widget, plugin)
         })
     end
     table.insert(buttons, row)
+    local current_filter = Config.get("library_filter")
+    local filter_row = {}
+    for __, f in ipairs(FILTERS) do
+        table.insert(filter_row, {
+            text = (f.id == current_filter and "✓ " or "") .. f.text,
+            callback = function()
+                UIManager:close(dialog)
+                Config.set("library_filter", f.id)
+                Library.session.grid_page, Library.session.list_page = 1, 1
+                widget.page = 1
+                widget:reload()
+            end,
+        })
+    end
+    table.insert(buttons, filter_row)
     table.insert(buttons, {})
     for __, s in ipairs(SORTS) do
         table.insert(buttons, {{
@@ -198,7 +260,9 @@ end
 
 function Library.List:buildItems()
     local items = {}
-    for __, b in ipairs(Library.loadBooks(self.plugin)) do
+    local books, total = Library.loadBooks(self.plugin)
+    self.subtitle = Library.subtitle(#books, total)
+    for __, b in ipairs(books) do
         table.insert(items, {
             text = b.authors and (b.title .. " — " .. b.authors) or b.title,
             mandatory = Library.progressText(b),
@@ -207,7 +271,7 @@ function Library.List:buildItems()
     end
     if #items == 0 then
         table.insert(items, {
-            text = _("No books yet. Use Send Book on the Home screen to add one."),
+            text = (Library.emptyText(total):gsub("\n", " ")),
             select_enabled = false,
         })
     end
@@ -223,7 +287,8 @@ function Library.List:paintTo(bb, x, y)
 end
 
 function Library.List:reload()
-    self:switchItemTable(nil, self:buildItems())
+    local items = self:buildItems()
+    self:switchItemTable(nil, items, nil, nil, self.subtitle)
 end
 
 function Library.List:onMenuChoice(item)

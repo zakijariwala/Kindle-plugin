@@ -61,7 +61,7 @@ function LibraryGrid:init()
     end
     self.tiles = {}
     self:computeLayout()
-    self.books = Library.loadBooks(self.plugin)
+    self.books, self.total_books = Library.loadBooks(self.plugin)
     -- Come back to the page you were on (for this KOReader session).
     self.page = math.max(1, math.min(Library.session.grid_page or 1, self:pageCount()))
     self:buildPage()
@@ -82,6 +82,7 @@ function LibraryGrid:computeLayout()
         width = w,
         fullscreen = true,
         title = _("My Library"),
+        subtitle = " ", -- a subtitle widget must exist for setSubTitle() to work
         with_bottom_line = true,
         left_icon = "appbar.menu",
         left_icon_tap_callback = function() Library.showOptions(self, self.plugin) end,
@@ -193,7 +194,7 @@ function LibraryGrid:buildPage()
     if #self.books == 0 then
         table.insert(grid, VerticalSpan:new{ width = Screen:scaleBySize(40) })
         table.insert(grid, TextBoxWidget:new{
-            text = _("No books yet.\nUse Send Book on the Home screen to add one."),
+            text = Library.emptyText(self.total_books),
             face = Common.face("body"),
             width = self.inner_w,
             alignment = "center",
@@ -273,7 +274,7 @@ function LibraryGrid:buildPage()
             },
         },
     }
-    self.title_bar:setSubTitle(T(_("%1 books"), #self.books))
+    self.title_bar:setSubTitle(Library.subtitle(#self.books, self.total_books))
     self:moveFocusTo(1, 1, FocusManager.FOCUS_ONLY_ON_NT)
     -- Start after this page has been painted.
     UIManager:nextTick(function()
@@ -336,7 +337,7 @@ function LibraryGrid:showDetails(book)
 end
 
 function LibraryGrid:reload()
-    self.books = Library.loadBooks(self.plugin)
+    self.books, self.total_books = Library.loadBooks(self.plugin)
     self.page = math.min(self.page, self:pageCount())
     self:buildPage()
     UIManager:setDirty(self, "partial")
