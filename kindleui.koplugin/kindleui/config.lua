@@ -22,6 +22,7 @@ local DEFAULTS = {
     library_group_series = false,  -- one tile per series (2+ books) in My Library
     home_recent = true,            -- "Recently added" row on Home
     home_more_reading = true,      -- up to 2 more books being read, under Continue Reading
+    home_time_left = true,         -- "2:15 left" on the Continue Reading card (Statistics plugin data)
     text_size = "medium",          -- "small" | "medium" | "large" (Home, Library, Send Book)
     pinned_plugins = nil,          -- plugin names pinned to Home (max 4); nil = none
     library_max_books = 2000,      -- safety cap for the library scan

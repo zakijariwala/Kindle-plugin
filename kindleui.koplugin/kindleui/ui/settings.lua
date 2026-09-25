@@ -98,6 +98,15 @@ function Settings.build(plugin)
             sub_item_table = sort_items,
         },
         {
+            text = _("Show time left on Home"),
+            help_text = _("Estimated reading time left in the current book, from the Statistics plugin (average time per page so far). Shown only when Statistics is enabled and has data for the book."),
+            checked_func = function() return Config.get("home_time_left") ~= false end,
+            callback = function()
+                Config.set("home_time_left", Config.get("home_time_left") == false)
+                plugin:onLibraryChanged()
+            end,
+        },
+        {
             text = _("Show other books being read on Home"),
             help_text = _("Up to two more books from your reading history, under Continue Reading. Finished books are left out."),
             checked_func = function() return Config.get("home_more_reading") ~= false end,

@@ -32,7 +32,7 @@ Last updated: 2026-09-25. Branch: `claude/kindle-plugin-handoff-wndhwa` of `zaki
   - a read-only folder is refused before the upload starts.
 - Self-updater: GitHub → zip → staging → compile check → swap, with its own TLS peer verification.
 - Unit tests: `tests/run.sh`, all passing (including `test_plugininstaller.lua`).
-- Emulator smoke test: `tests/e2e/smoke.sh`, 53 steps, passing.
+- Emulator smoke test: `tests/e2e/smoke.sh`, 54 steps, passing.
 - **Install plugin from phone (ROADMAP #21):**
   - `util/pluginzip.lua` (pure zip analysis) and `util/plugininstaller.lua`
     (stage → compile check → swap; a replaced version is kept as
@@ -88,13 +88,16 @@ Last updated: 2026-09-25. Branch: `claude/kindle-plugin-handoff-wndhwa` of `zaki
   runs KOReader as a desktop (`KO_MULTIUSER`), so only Night mode is live
   there; frontlight, Wi-Fi and sleep need a device check.
 
+- **Time left (ROADMAP #18):** `util/readingtime.lua` reads the book's row
+  from `statistics.sqlite3` (by partial MD5, read-only), estimate tested in
+  `test_readingtime.lua`; Settings → Library toggle `home_time_left`.
+
 ## Next, in ranked order (see docs/ROADMAP.md)
 
-- #18 time left
 - #19 send into collection
 - #20 landscape Home
 
-ROADMAP: #9–17 and #21 are marked ✅, #18 is 🔜.
+ROADMAP: #9–18 and #21 are marked ✅, #19 is 🔜.
 
 ## Working notes
 

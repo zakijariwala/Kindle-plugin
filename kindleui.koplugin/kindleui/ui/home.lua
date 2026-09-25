@@ -147,9 +147,16 @@ function Home:_continueReading(inner_w)
         })
     end
     if info.percent then
+        local progress = string.format("%d%%", math.floor(info.percent * 100 + 0.5))
+        if Config.get("home_time_left") ~= false then
+            local ReadingTime = require("kindleui/util/readingtime")
+            local seconds = ReadingTime.secondsLeft(file, info.percent, entry and entry.sdr)
+            if seconds then progress = progress .. "  ·  " .. ReadingTime.text(seconds) end
+        end
+        self.card_progress = progress -- (tests)
         table.insert(texts, VerticalSpan:new{ width = Size.span.vertical_large * 2 })
         table.insert(texts, TextWidget:new{
-            text = string.format("%d%%", math.floor(info.percent * 100 + 0.5)),
+            text = progress,
             face = Common.face("small"),
             max_width = text_w,
         })

@@ -256,6 +256,33 @@ local steps = {
         setting("home_more_reading", true)
         plugin():showHome()
     end },
+    { "home: time left from Statistics data", function()
+        -- Give the Continue Reading book a Statistics row: 50 pages read in
+        -- 3000 s, 300 pages → at its progress, (1 - p) * 300 * 60 s left.
+        local file = G_reader_settings:readSetting("lastfile")
+        local DocSettings = require("docsettings")
+        local ds = DocSettings:open(file)
+        ds:saveSetting("partial_md5_checksum", "smoke0123456789abcdef0123456789ab")
+        ds:flush()
+        require("kindleui/util/librarycache").invalidate(file)
+        local SQ3 = require("lua-ljsqlite3/init")
+        local conn = SQ3.open(require("datastorage"):getSettingsDir() .. "/statistics.sqlite3")
+        conn:exec([[CREATE TABLE IF NOT EXISTS book (id integer PRIMARY KEY autoincrement, title text, authors text,
+            notes integer, last_open integer, highlights integer, pages integer, series text, language text,
+            md5 text, total_read_time integer, total_read_pages integer);]])
+        conn:exec("DELETE FROM book WHERE md5 = 'smoke0123456789abcdef0123456789ab';")
+        conn:exec("INSERT INTO book (title, authors, pages, md5, total_read_time, total_read_pages, last_open) " ..
+            "VALUES ('Smoke', 'Smoke', 300, 'smoke0123456789abcdef0123456789ab', 3000, 50, " .. os.time() .. ");")
+        conn:close()
+        plugin():showHome()
+        local text = top().card_progress or ""
+        logger.info("KINDLEUI SMOKE card progress: " .. text)
+        assert(text:find("left", 1, true), "no time left on the card: " .. text)
+        setting("home_time_left", false)
+        plugin():showHome()
+        assert(not (top().card_progress or ""):find("left", 1, true), "shown while switched off")
+        setting("home_time_left", true)
+    end },
     { "quick settings: night mode on and off", function()
         local home = top()
         local function nightButton()

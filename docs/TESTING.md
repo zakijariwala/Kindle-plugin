@@ -29,6 +29,7 @@ KOREADER_BASE=/path/to/koreader/base ./tests/run.sh   # also encodes the QR with
 | `test_pluginzip.lua` | Plugin folder found at any depth, GitHub `-main` folders, `<name>.koplugin.zip` roots, several plugins; junk skipped; `..`/absolute/backslash paths, links, size and file-count limits refused; `_meta.lua` fields read as text (all quote styles, gettext); built-in list parsed from `pluginloader.lua` |
 | `test_plugininstaller.lua` | With a fake archive reader (which, like KOReader's, only extracts entries it has iterated) in real temp folders: analysis (name, description, new/replace), install of a new plugin (junk and files outside the plugin not written, no staging left), **replace keeps the previous version as `.undo`**, Undo restores it, Undo removes a newly added plugin, only one level of Undo, a later install drops the older `.undo`, built-in / this plugin / syntax error / traversal / link refused with nothing changed, stale `.undo`/`.old` do not block a replace, startup cleanup of orphan `.undo` folders and of the incoming folder |
 | `test_series.lua` | Series members in reading order (index, then title, fractional index), grouping keeps the sort position of the first book, groups show volume 1, a series of one book is not grouped, book count through groups |
+| `test_readingtime.lua` | Time-left estimate: pages left × average time per page, no estimate below 5 pages read, when finished, without a page count or statistics row; values stored as text |
 | `test_qr.lua` | URL format and length, QR encodes with KOReader's `ffi/qrencode` (≤ version 5), multi-file picker, page escaping, no external resources, CSP |
 
 ## 2. Emulator (real KOReader, scripted)
@@ -59,6 +60,8 @@ drives the plugin through its own functions:
 - other books being read on Home (reading history filled by the patch), in
   history order, and switched off; marking one Finished from its hold menu
   (it leaves the rows); removing the Continue Reading book from the history;
+- time left on the Continue Reading card, from a Statistics row the patch
+  writes (and hidden when switched off);
 - quick settings: night mode toggled on and off through the panel, the panel
   opened by a swipe, and (with the device's light/Wi-Fi/sleep flags forced on,
   since the emulator runs KOReader as a desktop) the full five-entry panel;
