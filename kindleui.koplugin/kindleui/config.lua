@@ -27,6 +27,7 @@ local DEFAULTS = {
     transfer_port = 8080,          -- first port tried; the next 9 are fallbacks
     transfer_timeout = 15 * 60,    -- seconds before a Send Book session expires
     transfer_max_mb = 500,
+    last_plugin_install = nil,     -- { name, had_previous }: what "Undo last plugin install" reverts
 }
 Config.DEFAULTS = DEFAULTS
 
