@@ -42,6 +42,8 @@ local _ = require("gettext")
 local T = require("ffi/util").template
 local Screen = Device.screen
 
+local FULL_REFRESH_EVERY = 6
+
 local LibraryGrid = FocusManager:extend{
     name = "kindleui_library_grid",
     covers_fullscreen = true,
@@ -315,7 +317,11 @@ function LibraryGrid:goToPage(page)
     self.t_open, self.t_label = Perf.start(), "library page turn (to first paint)"
     self.page = page
     self:buildPage()
-    UIManager:setDirty(self, "partial")
+    -- E-ink: page turns use a quick partial refresh (no black flash); every
+    -- FULL_REFRESH_EVERY turns, one full refresh clears the accumulated ghosting
+    -- of cover images (like a stock Kindle does).
+    self.turns = (self.turns or 0) + 1
+    UIManager:setDirty(self, self.turns % FULL_REFRESH_EVERY == 0 and "full" or "partial")
 end
 
 function LibraryGrid:onNextPage() self:goToPage(self.page + 1) return true end
