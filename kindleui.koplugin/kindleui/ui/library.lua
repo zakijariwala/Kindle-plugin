@@ -21,6 +21,7 @@ local Device = require("device")
 local Menu = require("ui/widget/menu")
 local Perf = require("kindleui/util/perf")
 local Selection = require("kindleui/ui/selection")
+local Series = require("kindleui/util/series")
 local UIManager = require("ui/uimanager")
 local ffiUtil = require("ffi/util")
 local _ = require("gettext")
@@ -49,14 +50,19 @@ local Library = {
     VIEWS = VIEWS,
     FILTERS = FILTERS,
     -- Remembered for this KOReader session only (not saved to disk).
-    session = { grid_page = 1, list_page = 1, search = nil },
+    -- `series`: the series being browsed (grouping on), nil = the whole library.
+    session = { grid_page = 1, list_page = 1, search = nil, series = nil },
 }
 
 local function lower(s) return s and s:lower() or "" end
 
 --- Scans, annotates from the cache and sorts. Logs timings.
+-- With series grouping on, series of 2+ books come back as group items
+-- (util/series.lua); inside a series (session.series), its books in order.
+-- @param opts optional { no_group = true } (selection mode: books only)
 -- @treturn table array of books { path, name, mtime, size, title, authors, percent, status, entry }
-function Library.loadBooks(plugin)
+--   (or group items), total number of books, all books
+function Library.loadBooks(plugin, opts)
     local ui = plugin and plugin.ui
     local t0 = Perf.start()
     local books = Books.scan(Books.homeDir(), Config.get("library_max_depth"), Config.get("library_max_books"))
@@ -95,6 +101,11 @@ function Library.loadBooks(plugin)
     Cache.save()
     local shown = Library.applyCollection(books, Library.currentCollection())
     shown = Library.applySearch(Library.applyFilter(shown, Config.get("library_filter")), Library.session.search)
+    if Library.session.series then
+        shown = Series.members(shown, Library.session.series)
+    elseif Config.get("library_group_series") and not (opts and opts.no_group) then
+        shown = Series.group(shown)
+    end
     Perf.log("library data", t0, {
         books = stats.books, shown = #shown, scan_ms = scan_ms, meta_ms = meta_ms,
         sidecar_reads = stats.sidecar_reads, new_entries = stats.new_entries,
@@ -256,8 +267,31 @@ function Library.askSearch(widget)
     dialog:onShowKeyboard()
 end
 
+--- Opens a series (grouping on): its books, in reading order.
+function Library.openSeries(widget, name)
+    Library.session.series = name
+    Library.session.grid_page, Library.session.list_page = 1, 1
+    widget.page = 1
+    widget:reload()
+end
+
+--- Back from a series to the whole library. Returns true if it was in one.
+function Library.leaveSeries(widget)
+    if not Library.session.series then return false end
+    Library.session.series = nil
+    Library.session.grid_page, Library.session.list_page = 1, 1
+    widget.page = 1
+    widget:reload()
+    return true
+end
+
 --- Title-bar subtitle, e.g. "150 books" or "12 of 150 · Reading".
+-- `shown` may be the item list (with series groups) or a number.
 function Library.subtitle(shown, total)
+    if type(shown) == "table" then shown = Series.bookCount(shown) end
+    if Library.session.series then
+        return T(_("Series: %1 · %2 books"), Library.session.series, shown)
+    end
     if Library.session.search then
         return T(_("“%1”: %2 of %3"), Library.session.search, shown, total)
     end
@@ -373,6 +407,17 @@ function Library.showOptions(widget, plugin)
         })
     end
     table.insert(buttons, search_row)
+    table.insert(buttons, {{
+        text = (Config.get("library_group_series") and "✓ " or "") .. _("Group series"),
+        callback = function()
+            UIManager:close(dialog)
+            Config.set("library_group_series", not Config.get("library_group_series"))
+            Library.session.series = nil
+            Library.session.grid_page, Library.session.list_page = 1, 1
+            widget.page = 1
+            widget:reload()
+        end,
+    }})
     if widget.setSelecting then
         table.insert(buttons, {{
             text = _("Select books…"),
@@ -463,13 +508,21 @@ end
 function Library.List:buildItems(keep_books)
     local items = {}
     if not keep_books or not self.books then
-        self.books, self.total_books = Library.loadBooks(self.plugin)
+        self.books, self.total_books = Library.loadBooks(self.plugin, { no_group = self.selecting })
         if self.selection then self.selection:keepOnly(self.books) end
     end
     local books, total = self.books, self.total_books
     self.subtitle = self.selecting and (self.selection:label() .. " · " .. _("☰ for actions"))
-        or Library.subtitle(#books, total)
+        or Library.subtitle(books, total)
     for __, b in ipairs(books) do
+        if b.is_series then
+            table.insert(items, {
+                text = "▸ " .. b.series,
+                mandatory = T(_("%1 books"), b.count),
+                series = b.series,
+            })
+            goto continue
+        end
         local mark = self.selecting and (self.selection:has(b.path) and "☑ " or "☐ ") or ""
         table.insert(items, {
             text = mark .. (b.authors and (b.title .. " — " .. b.authors) or b.title),
@@ -477,6 +530,7 @@ function Library.List:buildItems(keep_books)
             file = b.path,
             book_title = b.title,
         })
+        ::continue::
     end
     if #items == 0 then
         table.insert(items, {
@@ -505,7 +559,9 @@ function Library.List:setSelecting(on, first_path)
     self.selecting = on and true or nil
     self.selection = on and Selection.new() or nil
     if on and first_path then self.selection:toggle(first_path) end
-    self:refreshSelection()
+    -- series groups are shown as books while selecting
+    local items = self:buildItems()
+    self:switchItemTable(nil, items, -1, nil, self.subtitle)
 end
 
 function Library.List:refreshSelection()
@@ -524,6 +580,10 @@ function Library.List:pageBooks()
 end
 
 function Library.List:onMenuChoice(item)
+    if item.series then
+        Library.openSeries(self, item.series)
+        return true
+    end
     if not item.file then return true end
     if self.selecting then
         self.selection:toggle(item.file)
@@ -540,11 +600,13 @@ function Library.List:onClose()
         self:setSelecting(false)
         return true
     end
+    if Library.leaveSeries(self) then return true end -- then a series
     return Menu.onClose(self)
 end
 
 -- Hold a book: the book menu (status, reset, delete, details).
 function Library.List:onMenuHold(item)
+    if item.series then return self:onMenuChoice(item) end
     if not item.file then return true end
     if self.selecting then return self:onMenuChoice(item) end
     require("kindleui/ui/bookmenu").show{

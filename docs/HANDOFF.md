@@ -32,7 +32,7 @@ Last updated: 2026-09-25. Branch: `claude/kindle-plugin-handoff-wndhwa` of `zaki
   - a read-only folder is refused before the upload starts.
 - Self-updater: GitHub → zip → staging → compile check → swap, with its own TLS peer verification.
 - Unit tests: `tests/run.sh`, all passing (including `test_plugininstaller.lua`).
-- Emulator smoke test: `tests/e2e/smoke.sh`, 51 steps, passing.
+- Emulator smoke test: `tests/e2e/smoke.sh`, 52 steps, passing.
 - **Install plugin from phone (ROADMAP #21):**
   - `util/pluginzip.lua` (pure zip analysis) and `util/plugininstaller.lua`
     (stage → compile check → swap; a replaced version is kept as
@@ -77,15 +77,20 @@ Last updated: 2026-09-25. Branch: `claude/kindle-plugin-handoff-wndhwa` of `zaki
   restart. Note: `Menu`/`FocusManager` use `self.selected` for key focus;
   don't name widget fields `selected`.
 
+- **Series grouping (ROADMAP #16):** `util/series.lua` (pure, tested);
+  cache entries carry `series`/`series_index` (per-entry `meta = 2`, older
+  entries upgraded lazily); Library ☰ → Group series. Also checked in the
+  emulator: series extracted from never-opened EPUBs (calibre:series), and
+  the upgrade of a cache without series.
+
 ## Next, in ranked order (see docs/ROADMAP.md)
 
-- #16 series
 - #17 quick settings
 - #18 time left
 - #19 send into collection
 - #20 landscape Home
 
-ROADMAP: #9–15 and #21 are marked ✅, #16 is 🔜.
+ROADMAP: #9–16 and #21 are marked ✅, #17 is 🔜.
 
 ## Working notes
 

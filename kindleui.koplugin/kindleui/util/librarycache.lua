@@ -34,6 +34,10 @@ local C = ffi.C
 pcall(ffi.cdef, "void free(void *);") -- already declared by koreader-base in practice
 
 local SCHEMA = 1
+-- Per-entry metadata version. 2 adds series/series_index: older entries are
+-- brought up to date the next time they are looked at (sidecar re-read for
+-- opened books, metadata/cover extraction again for the others).
+local META = 2
 local COVER_MAGIC = "KUIC1" -- header: magic, w, h, bb type, stride (text line) then zstd data
 
 local Cache = {
@@ -89,6 +93,10 @@ local function readSidecarInfo(ui, entry, path)
         entry.title = props.title
         entry.authors = props.authors
     end
+    if ok and props then
+        entry.series = props.series
+        entry.series_index = tonumber(props.series_index)
+    end
 end
 
 -- Brings one entry up to date. Returns the entry and whether the sidecar was read.
@@ -97,11 +105,20 @@ local function refreshEntry(ui, path, mtime, size)
     if not e or e.mtime ~= mtime or e.size ~= size then
         -- new or replaced file: start over (cover and metadata too)
         if e and e.cover then os.remove(coverDir() .. "/" .. e.cover) end
-        e = { mtime = mtime, size = size }
+        e = { mtime = mtime, size = size, meta = META }
         Cache.entries[path] = e
         Cache.dirty = true
     end
     local sdr = sidecarMtime(path)
+    if (e.meta or 1) < META then
+        e.meta = META
+        if sdr then
+            e.sdr = nil -- opened book: re-read its sidecar (below)
+        elseif e.extracted then
+            e.extracted = nil -- never opened: extract its metadata (and cover) again
+        end
+        Cache.dirty = true
+    end
     if e.sdr == sdr then
         return e, false
     end
@@ -131,6 +148,8 @@ function Cache.annotate(ui, books)
         end
         b.title = e.title or util.splitFileNameSuffix(b.name)
         b.authors = e.authors
+        b.series = e.series
+        b.series_index = e.series_index
         b.percent = e.percent
         b.status = e.status
         b.entry = e
@@ -279,6 +298,10 @@ function Cache.extract(path, entry, max_w, max_h)
             if props.title and not entry.title then
                 entry.title = props.title
                 entry.authors = props.authors
+            end
+            if props.series and not entry.series then
+                entry.series = props.series
+                entry.series_index = tonumber(props.series_index)
             end
             local cover_bb = FileManagerBookInfo:getCoverImage(document)
             if cover_bb then

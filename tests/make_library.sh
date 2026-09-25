@@ -3,7 +3,8 @@
 #   tests/make_library.sh <dir> [books=150] [with_progress=50]
 # Books are copies of KOReader's test-data samples (tests/books) under distinct
 # names; the first <with_progress> get a KOReader sidecar (.sdr/metadata.*.lua)
-# with title, author and reading progress, as if they had been read.
+# with title, author and reading progress, as if they had been read. Books
+# 4-6 are the series "Smoke Saga" (6 is volume 1, 4 is volume 3).
 set -e
 DIR=$1; N=${2:-150}; P=${3:-50}
 "$(dirname "$0")/fetch_books.sh" > /dev/null
@@ -29,7 +30,7 @@ return {
     ["doc_pages"] = 300,
     ["doc_props"] = {
         ["title"] = "Test Book $i",
-        ["authors"] = "Author $(( i % 17 ))",
+        ["authors"] = "Author $(( i % 17 ))",$( [ $i -ge 4 ] && [ $i -le 6 ] && printf '\n        ["series"] = "Smoke Saga",\n        ["series_index"] = %d,' $(( 7 - i )) )
         ["language"] = "en",
     },
     ["summary"] = {

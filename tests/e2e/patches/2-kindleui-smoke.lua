@@ -96,6 +96,24 @@ local steps = {
         assert(not require("kindleui/util/librarycache").entries[path], "still in the cache")
         for __, t in ipairs(top().tiles) do assert(t.book.path ~= path, "still in the grid") end
     end },
+    { "grid: group series", function()
+        local grid = top()
+        setting("library_group_series", true)
+        grid:reload()
+        local group
+        for __, b in ipairs(grid.books) do if b.is_series and b.series == "Smoke Saga" then group = b end end
+        assert(group, "no Smoke Saga group")
+        assert(group.count == 3, "group count " .. group.count)
+        assert(group.path:find("Book 006", 1, true), "group cover is not volume 1: " .. group.path)
+        assert(require("kindleui/ui/library").subtitle(grid.books, grid.total_books):find(tostring(grid.total_books), 1, true), "subtitle count")
+        grid:onTile(group)
+        assert(#grid.books == 3, "books in series: " .. #grid.books)
+        assert(grid.books[1].path:find("Book 006", 1, true) and grid.books[3].path:find("Book 004", 1, true), "reading order")
+        grid:onClose()
+        assert(top() == grid and not require("kindleui/ui/library").session.series, "close did not leave the series")
+        setting("library_group_series", false)
+        grid:reload()
+    end },
     { "grid: select mode from the book menu", function()
         local grid = top()
         grid:showDetails(grid.tiles[1].book)

@@ -66,7 +66,7 @@ function LibraryGrid:init()
     end
     self.tiles = {}
     self:computeLayout()
-    self.books, self.total_books, self.all_books = Library.loadBooks(self.plugin)
+    self.books, self.total_books, self.all_books = Library.loadBooks(self.plugin, { no_group = self.selecting })
     -- Come back to the page you were on (for this KOReader session).
     self.page = math.max(1, math.min(Library.session.grid_page or 1, self:pageCount()))
     self:buildPage()
@@ -167,8 +167,9 @@ function LibraryGrid:tileContent(book)
     }
 end
 
--- "63%", or "☑ 63%" / "☐ 63%" while selecting.
+-- "63%", or "☑ 63%" / "☐ 63%" while selecting; "5 books" for a series.
 function LibraryGrid:labelText(book)
+    if book.is_series then return T(_("▸ %1 books"), book.count) end
     local text = Library.progressText(book)
     if not self.selecting then return text end
     return (self.selection:has(book.path) and "☑ " or "☐ ") .. text
@@ -180,8 +181,7 @@ function LibraryGrid:setSelecting(on, first_path)
     self.selecting = on and true or nil
     self.selection = on and Selection.new() or nil
     if on and first_path then self.selection:toggle(first_path) end
-    self:buildPage()
-    UIManager:setDirty(self, "ui")
+    self:reload() -- series groups are shown as books while selecting
 end
 
 function LibraryGrid:refreshSelection()
@@ -199,7 +199,9 @@ function LibraryGrid:pageBooks()
 end
 
 function LibraryGrid:onTile(book)
-    if self.selecting then
+    if book.is_series then
+        Library.openSeries(self, book.series)
+    elseif self.selecting then
         self.selection:toggle(book.path)
         self:refreshSelection()
     else
@@ -241,7 +243,7 @@ function LibraryGrid:buildPage()
             local tile = Common.Tappable:new{
                 callback = function() self:onTile(book) end,
                 hold_callback = function()
-                    if self.selecting then self:onTile(book) else self:showDetails(book) end
+                    if self.selecting or book.is_series then self:onTile(book) else self:showDetails(book) end
                 end,
                 self:tileContent(book),
             }
@@ -308,7 +310,7 @@ function LibraryGrid:buildPage()
     }
     self.title_bar:setSubTitle(self.selecting
         and (self.selection:label() .. " · " .. _("☰ for actions"))
-        or Library.subtitle(#self.books, self.total_books))
+        or Library.subtitle(self.books, self.total_books))
     self:moveFocusTo(1, 1, FocusManager.FOCUS_ONLY_ON_NT)
     -- Start after this page has been painted.
     UIManager:nextTick(function()
@@ -323,8 +325,10 @@ function LibraryGrid:refreshTileFor(path)
     for __, tile in ipairs(self.tiles) do
         local book = tile.book
         if book.path == path then
-            book.title = book.entry.title or book.title
-            book.authors = book.entry.authors or book.authors
+            if not book.is_series then -- a group keeps its series name
+                book.title = book.entry.title or book.title
+                book.authors = book.entry.authors or book.authors
+            end
             -- Swap the tile's content in place and refresh just that tile.
             tile[1] = self:tileContent(book)
             UIManager:setDirty(self, function() return "ui", tile.dimen end)
@@ -380,7 +384,7 @@ function LibraryGrid:prepareAll()
             Perf.log("prepare all covers (child process)", t0, { books = job.done })
             self.extract_job = nil
             self.preparing = nil
-            self.title_bar:setSubTitle(Library.subtitle(#self.books, self.total_books))
+            self.title_bar:setSubTitle(Library.subtitle(self.books, self.total_books))
             UIManager:show(InfoMessage:new{ text = T(_("Covers ready for %1 books."), job.done), timeout = 3 })
         end,
     })
@@ -415,7 +419,7 @@ function LibraryGrid:showDetails(book)
 end
 
 function LibraryGrid:reload()
-    self.books, self.total_books, self.all_books = Library.loadBooks(self.plugin)
+    self.books, self.total_books, self.all_books = Library.loadBooks(self.plugin, { no_group = self.selecting })
     if self.selection then self.selection:keepOnly(self.books) end
     self.page = math.min(self.page, self:pageCount())
     self:buildPage()
@@ -468,6 +472,7 @@ function LibraryGrid:onClose()
         self:setSelecting(false)
         return true
     end
+    if Library.leaveSeries(self) then return true end -- then a series
     UIManager:close(self)
     return true
 end

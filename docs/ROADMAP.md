@@ -29,8 +29,8 @@ checked in the KOReader emulator before the next.
 | 13 | Hold menu on a cover: mark read/unread, remove from Continue Reading, delete, details | medium | ✅ |
 | 14 | Collections (KOReader's own) as a Library filter | medium | ✅ |
 | 15 | Multi-select and batch actions (Library + Installed Plugins) | medium | ✅ |
-| 16 | Series grouping | medium | 🔜 |
-| 17 | Quick settings panel (frontlight, warmth, night mode, Wi-Fi) | medium | |
+| 16 | Series grouping | medium | ✅ |
+| 17 | Quick settings panel (frontlight, warmth, night mode, Wi-Fi) | medium | 🔜 |
 | 18 | Time left in book (only with the Statistics plugin) | medium | |
 | 19 | Send Book into a collection | medium (after 14) | |
 | 20 | Landscape layout for Home | medium | |
@@ -100,7 +100,7 @@ ever written into the plugins folder:
 | ✅ | **Filter: All / Unread / Reading / Finished** | Filter the in-memory book list (status is already cached). | Cheap. |
 | ✅ | **Search** by title/author | On-screen keyboard; filter the in-memory list, no disk access. | Cheap. |
 | ✅ | **Collections** (Kindle "Collections") | KOReader's own collections (the same ones as its file browser). Library ☰ → *Collection: …* picks one (with book counts) or all books; it combines with the reading-state filter and search, and shows in the subtitle. A book's hold menu has KOReader's own **Collections…** chooser (add/remove); the change is saved at once (KOReader itself writes `collection.lua` only when its file browser closes). A collection that was deleted falls back to all books. Books of a collection outside the home folder are not shown (the Library only lists the home folder). | Cheap: KOReader keeps collections in memory; one table lookup per book, only while a collection is selected. |
-| 💡 | **Series grouping** | Group by the series name from book metadata. | Cheap once metadata is extracted. |
+| ✅ | **Series grouping** | Library ☰ → *Group series*: each series of 2+ books becomes one tile (volume 1's cover, "▸ N books"), placed where its first book falls in the current sort. Tap it to see the series in reading order (series index, then title); ✕ / Back returns. Series come from KOReader's metadata (sidecar for opened books, the book itself for the others). Selection mode shows the books individually. | Cheap: series is stored in the library cache. Existing cache entries are upgraded once as they are looked at (sidecar re-read; never-opened books are re-extracted with their page). |
 | ✅ | **Hold menu on a cover** (Library grid and list, and every book on Home): Reading / On hold / Finished, Reset (mark as unread)…, Remove from Continue Reading, Book details, Delete book… | Status, Reset and Delete are KOReader's own buttons and dialogs (`filemanagerutil`, `FileManager:showDeleteFileDialog`), so they also clean the sidecar, history and collections. Removing the book in Continue Reading moves the next book of the history there. | Cheap; Reset and Delete ask for confirmation. |
 | ✅ | **Remember the page** you were on when coming back to the Library | Keep the page number in memory for the session. | Free. |
 | 💡 | **Prepare all covers now** (Library options) | Run the existing child-process extractor over every book once, e.g. while charging. The user starts it; it stops when the Library closes. | Heavy but explicit and one-off; memory stays flat (child process). |
