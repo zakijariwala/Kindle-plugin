@@ -43,6 +43,19 @@ account and no phone app are involved.
    a gesture/key via **Taps and gestures → Gesture manager → General →
    Kindle-style Home**.
 
+### Updating
+
+**Settings → About → Check for updates** (needs internet; the phone hotspot
+with mobile data on is fine). It compares your installed build with the
+latest commit on this repository's `main` branch. If there is a newer one, it
+shows what changed and, after you tap **Update**, downloads it, checks it and
+replaces the plugin. Then restart KOReader. Your settings, library cache and
+covers are kept. Nothing is ever checked automatically.
+
+The repository must be **public** for this to work (the Kindle downloads
+without any GitHub login). An install copied by hand shows its build as
+"unknown", and the first check offers the latest version.
+
 To turn the shell off without uninstalling it: **Settings → Library → Show
 Home screen at startup**, or disable the plugin in KOReader's **Plugin
 management**. To uninstall, delete the folder.
@@ -177,6 +190,7 @@ build. Every KOReader API it uses is listed, with its source location, in
 - [docs/TESTING.md](docs/TESTING.md): automated tests, the emulator runs and
   the manual test procedure for devices.
 - [docs/PERFORMANCE.md](docs/PERFORMANCE.md): measured timings and memory.
+- [docs/ROADMAP.md](docs/ROADMAP.md): feature list and ideas, each with its performance cost.
 
 ## Development
 

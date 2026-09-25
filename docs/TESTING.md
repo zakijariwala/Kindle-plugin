@@ -25,6 +25,7 @@ KOREADER_BASE=/path/to/koreader/base ./tests/run.sh   # also encodes the QR with
 | luacheck | undefined globals, unused variables, typos |
 | `test_security.lua` | Tokens: randomness, format, uniqueness, and the RNG fails closed. Constant-time compare. Filename sanitizer: spaces, Unicode, traversal, absolute paths, NUL, invalid UTF-8, overlong, surrogates, VFAT characters, hidden names, length cap. Safe joins. Duplicate-name suffixes. **Stale temp cleanup** removes exactly our pattern and leaves everything else (including a directory with that name). Format sniffing. IP selection. |
 | `test_transfer.lua` | A real LuaSocket server with curl as the phone. Upload page served. Invalid, truncated or missing token rejected. Traversal, absolute and NUL names rejected. Unsupported type → 415. Chunked upload without a length → 411. Oversize → 413. Wrong method → 405. Fake EPUB rejected after upload (422) with nothing left behind. Interrupted upload: temp file exists during, is removed after, and the UI is told "cancelled". Unicode + spaces EPUB stored byte-identical. Progress events carry book *i of N*. Session stays open until `/finish`, then stops (server unregistered, token cleared, port closed). **Several books in one session**, with one rejected in the middle. Old token rejected by a new session. Duplicate name → "(2)". PDF with `Expect: 100-continue`. Cancel: port closed, timer removed, idempotent. Idle expiry. **No expiry while a slow upload is arriving**, then expiry once idle. Disk full → 507. Read-only folder (skipped when run as root). No `.part` leftovers. |
+| `test_updater.lua` | Certificate host-name matching (exact, case, wildcard rules, suffix attacks), SAN/CN extraction, archive entry filtering (only `kindleui.koplugin/`, no traversal), staging paths are hidden and never `*.koplugin`, validation catches syntax errors and missing files, folder swap, rollback when the swap fails |
 | `test_qr.lua` | URL format and length, QR encodes with KOReader's `ffi/qrencode` (≤ version 5), multi-file picker, page escaping, no external resources, CSP |
 
 ## 2. Emulator (real KOReader, scripted)
@@ -63,7 +64,11 @@ What was checked this way (KOReader v2026.07.1):
 | Port 8080 busy (noVNC in the container) → falls back to 8081 | ✓ |
 | No leftover or zombie processes after extraction jobs | ✓ |
 
-Not covered by the emulator: Kindle `iptables`, `lipc` sleep timer, real Wi-Fi
+| **Check for updates** against a fake GitHub over HTTPS (`tests/e2e/updater.sh`) | ✓ Shows installed/available build and the commit message; **Update** installs 27 plugin files (no README/tests) and writes `BUILD`; no staging/backup folder left; "Restart now" restarts KOReader and About shows the new version; checking again says "latest version"; with the server down: "Could not check for updates", installed build unchanged |
+| TLS checks with KOReader's own LuaJIT/LuaSec | ✓ valid cert accepted; wrong host name, self-signed cert, CA not in KOReader's bundle, plain HTTP and oversized responses refused |
+
+Not covered by the emulator: the real GitHub endpoints (the repository was
+private at the time; the requests are identical apart from the host), Kindle `iptables`, `lipc` sleep timer, real Wi-Fi
 hotspot, e-ink refresh behaviour, non-touch Kindles, real device speed.
 
 ## 3. Manual test procedure (device)
@@ -128,6 +133,14 @@ Read the `KindleUI perf:` lines in `crash.log`:
 | Cover extraction, 9 books | `covers extracted (child process)` |
 | Installed Plugins open | `plugins open (to first paint)` |
 | Memory | `lua_heap=` / `rss=` on each line; check `rss` after browsing every Library page |
+
+### Updates
+
+| # | Step | Expected |
+| --- | --- | --- |
+| P1 | Repository public; Kindle online; Settings → About → Check for updates | "An update is available" (first time: installed "unknown") or "You have the latest version" |
+| P2 | Update → Restart now | KOReader restarts; Settings → About → Version shows the new build |
+| P3 | Airplane mode → Check for updates | KOReader asks to turn Wi-Fi on; cancelling leaves everything unchanged |
 
 ### Lifecycle and leaks
 

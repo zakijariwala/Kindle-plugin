@@ -259,6 +259,63 @@ function KindleUI:showKOReaderMenu(icon)
     menu:onShowMenu(index)
 end
 
+--- Settings → About → Check for updates. Runs only when tapped.
+function KindleUI:checkForUpdates()
+    local ConfirmBox = require("ui/widget/confirmbox")
+    local NetworkMgr = require("ui/network/manager")
+    local Updater = require("kindleui/util/updater")
+    local T = require("ffi/util").template
+    local plugin_dir = self.path
+    if not plugin_dir then
+        UIManager:show(InfoMessage:new{ text = _("Cannot find the plugin folder.") })
+        return
+    end
+    -- Shows a message, lets it paint, then runs the (blocking) network step.
+    local function withMessage(text, fn)
+        local msg = InfoMessage:new{ text = text }
+        UIManager:show(msg)
+        UIManager:forceRePaint()
+        local ok, a, b = pcall(fn)
+        UIManager:close(msg)
+        if not ok then return nil, tostring(a) end
+        return a, b
+    end
+    NetworkMgr:runWhenOnline(function()
+        local latest, err = withMessage(_("Checking for updates…"), Updater.fetchLatest)
+        if not latest then
+            logger.warn("KindleUI updater: check failed:", err)
+            UIManager:show(InfoMessage:new{ text = T(_("Could not check for updates.\n\n%1"), tostring(err)) })
+            return
+        end
+        local installed = Updater.installedBuild(plugin_dir)
+        if installed and installed == latest.sha then
+            UIManager:show(InfoMessage:new{
+                text = T(_("You have the latest version (build %1)."), Updater.short(installed)),
+            })
+            return
+        end
+        UIManager:show(ConfirmBox:new{
+            text = T(_("An update is available.\n\nInstalled: %1\nAvailable: %2 (%3)\n%4\n\nInstall it now? KOReader will need to restart."),
+                installed and Updater.short(installed) or _("unknown"),
+                Updater.short(latest.sha), latest.date or "?", latest.message or ""),
+            ok_text = _("Update"),
+            ok_callback = function()
+                local ok, ierr = withMessage(_("Downloading and installing the update…"), function()
+                    return Updater.install(plugin_dir, latest.sha)
+                end)
+                if not ok then
+                    logger.warn("KindleUI updater: install failed:", ierr)
+                    UIManager:show(InfoMessage:new{
+                        text = T(_("The update could not be installed. The current version is unchanged.\n\n%1"), tostring(ierr)),
+                    })
+                    return
+                end
+                UIManager:askForRestart(_("The update is installed. Restart KOReader now to use it?"))
+            end,
+        })
+    end)
+end
+
 function KindleUI:showPluginManagement()
     local item = self:getKOMenuItem("plugin_management")
     if item and item.sub_item_table then

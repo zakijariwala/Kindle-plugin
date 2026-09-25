@@ -143,16 +143,30 @@ function Settings.build(plugin)
     -- About -------------------------------------------------------------------
     local about = {
         text = _("About"),
-        keep_menu_open = true,
-        callback = function()
-            local ok, Version = pcall(require, "version")
-            local ko_version = ok and Version:getCurrentRevision() or _("unknown")
-            local model = Device.model or _("unknown")
-            UIManager:show(InfoMessage:new{
-                text = T(_("Kindle-style Home for KOReader\nVersion %1\n\nKOReader %2\nDevice: %3\n\nKOReader remains the reading engine; all its features stay available under Settings → Advanced."),
-                    Config.VERSION, ko_version, model),
-            })
-        end,
+        sub_item_table = {
+            {
+                text = _("Version"),
+                keep_menu_open = true,
+                callback = function()
+                    local ok, Version = pcall(require, "version")
+                    local ko_version = ok and Version:getCurrentRevision() or _("unknown")
+                    local model = Device.model or _("unknown")
+                    local build = require("kindleui/util/updater").installedBuild(plugin.path or ".")
+                    UIManager:show(InfoMessage:new{
+                        text = T(_("Kindle-style Home\nVersion %1 (build %2)\n\nKOReader %3\nDevice: %4\n\nKOReader remains the reading engine; all its features stay available under Settings → Advanced."),
+                            Config.VERSION, build and build:sub(1, 7) or _("unknown"), ko_version, model),
+                    })
+                end,
+            },
+            {
+                text = _("Check for updates"),
+                help_text = _("Downloads the latest version of this plugin from GitHub (needs internet). Nothing is checked automatically."),
+                callback = function(touchmenu_instance)
+                    if touchmenu_instance then touchmenu_instance:closeMenu() end
+                    plugin:checkForUpdates()
+                end,
+            },
+        },
     }
 
     local root = {

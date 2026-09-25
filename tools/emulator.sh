@@ -10,6 +10,9 @@
 #   tools/emulator.sh start [books_dir]   start KOReader (Paperwhite 12 geometry)
 #       env: KO_PATCHES=dir  mount KOReader user patches (e.g. tests/bench)
 #            KO_CPUS=0.1     CPU quota (crude slow-device proxy)
+#            KO_PLUGINS_DIR=dir  mount a whole (writable) plugins folder instead of
+#                                this repo's plugin read-only (updater tests)
+#            KO_ADD_HOST=name:ip, KO_EXTRA_MOUNT=host:container  (updater tests)
 #   tools/emulator.sh shot out.png        screenshot
 #   tools/emulator.sh tap X Y             tap at screen coordinates
 #   tools/emulator.sh swipe X1 Y1 X2 Y2   drag
@@ -33,10 +36,17 @@ case "$1" in
 start)
     [ -n "$2" ] || "$ROOT/tests/fetch_books.sh" > /dev/null
     BOOKS=$(cd "${2:-$ROOT/tests/books}" && pwd)
+    if [ -n "$KO_PLUGINS_DIR" ]; then
+        PLUGIN_MOUNT="$KO_PLUGINS_DIR:/home/user/.config/koreader/plugins"
+    else
+        PLUGIN_MOUNT="$ROOT/kindleui.koplugin:/home/user/.config/koreader/plugins/kindleui.koplugin:ro"
+    fi
     docker rm -f "$NAME" > /dev/null 2>&1 || true
     docker run -d --name "$NAME" \
         -e EMULATE_READER_W="$W" -e EMULATE_READER_H="$H" -e EMULATE_READER_DPI="$DPI" \
-        -v "$ROOT/kindleui.koplugin:/home/user/.config/koreader/plugins/kindleui.koplugin:ro" \
+        -v "$PLUGIN_MOUNT" \
+        ${KO_ADD_HOST:+--add-host "$KO_ADD_HOST"} \
+        ${KO_EXTRA_MOUNT:+-v "$KO_EXTRA_MOUNT"} \
         -v "$BOOKS:/books" \
         ${KO_PATCHES:+-v "$KO_PATCHES:/home/user/.config/koreader/patches:ro"} \
         ${KO_CPUS:+--cpus "$KO_CPUS"} \

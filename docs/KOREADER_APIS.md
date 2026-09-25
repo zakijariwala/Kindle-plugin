@@ -116,6 +116,21 @@ Consequences worth knowing:
 | `libs/libkoreader-lfs`, `util.getFileNameSuffix`, `logger` | koreader-base, `frontend/util.lua`, `frontend/logger.lua` | Files, logging |
 | `ui/time` (`monotonic`, `to_ms`) | `frontend/ui/time.lua` | "KindleUI perf:" timings |
 
+## Self-update
+
+| API | Location | Used for |
+| --- | --- | --- |
+| `self.path` of the plugin instance (set by PluginLoader) | `pluginloader.lua:_load` (`plugin_module.path = plugin_root`) | Where the plugin is installed (what gets replaced) |
+| `socket.http.request{ url, sink, headers, redirect = false, create = … }` | bundled LuaSocket (`common/socket/http.lua`: a custom `create` replaces the https scheme's default) | Requests over our verified TLS connection |
+| `ssl.wrap`, `conn:sni`, `conn:dohandshake`, `conn:getpeercertificate`, `cert:extensions()`, `cert:subject()` | bundled LuaSec 1.3.2 | Chain check (`verify = "peer"`) + host-name check |
+| `data/ca-bundle.crt` | KOReader data folder (certifi bundle, `base/thirdparty/certifi`) | Trusted CAs |
+| `require("json").decode` | bundled | GitHub API answer |
+| `ffi/archiver` `Reader:new/open/iterate/extractToPath/close` | koreader-base `ffi/archiver.lua` (libarchive, `ARCHIVE_EXTRACT_SECURE_NODOTDOT`) | Extract the downloaded zip |
+| `ffiUtil.purgeDir` | koreader-base `ffi/util.lua:259` | Remove staging/backup folders |
+| `NetworkMgr:runWhenOnline(cb)` | `ui/network/manager.lua:698` | Make sure the Kindle is online first |
+| `UIManager:forceRePaint()` | `uimanager.lua:1404` | Show "Checking…" before the blocking request |
+| `UIManager:askForRestart(text)` | `uimanager.lua:1706` | "Restart KOReader now?" after installing |
+
 ## Uncertain / version-sensitive points
 
 - `MenuSorter:findById` returns, for sub-menus, the placeholder entry

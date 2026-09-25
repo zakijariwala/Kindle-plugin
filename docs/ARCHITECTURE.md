@@ -84,6 +84,8 @@ kindleui.koplugin/
         ├── extractor.lua     cover/metadata extraction in a child process
         ├── sleepguard.lua    hold/restore AutoSuspend + Kindle screensaver timer
         ├── perf.lua          "KindleUI perf:" timing/memory log lines
+        ├── https.lua         HTTPS GET with CA-chain *and* host-name checks
+        ├── updater.lua       Check for updates: latest commit → zip → stage → swap
         ├── network.lua       IPv4 discovery, Kindle firewall (logged)
         ├── filesystem.lua    paths, free space, writability, unique names,
         │                     format sniffing, stale temp cleanup
@@ -229,6 +231,31 @@ Measured numbers are in [PERFORMANCE.md](PERFORMANCE.md).
   registered. Each tick spends at most 40 ms reading, in 64 KiB chunks.
 - Installed Plugins runs no plugin code when it opens. A plugin's menu is built
   when you tap it.
+
+## Self-update
+
+Settings → About → **Check for updates** (only when tapped):
+
+```
+api.github.com/repos/zakijariwala/kindle-plugin/commits/main   → latest sha
+  same as BUILD file next to main.lua?  → "You have the latest version"
+codeload.github.com/zakijariwala/kindle-plugin/zip/<sha>        (≤ 20 MB)
+  extract only <repo>-<sha>/kindleui.koplugin/** (no "..", nothing else)
+  → plugins/.kindleui.koplugin.new     (hidden, not a *.koplugin: never loaded)
+  loadfile() main.lua, _meta.lua, config.lua, home.lua  → must compile
+  write BUILD
+  rename kindleui.koplugin → .kindleui.koplugin.old
+  rename .kindleui.koplugin.new → kindleui.koplugin    (rollback if this fails)
+  delete .old → "Restart KOReader now?"
+```
+
+**Why a custom HTTPS helper.** KOReader's LuaSec default is
+`verify = "none"` (`common/ssl/https.lua`), and LuaSec 1.3 does not check
+host names at all. For downloading code that gets installed, `util/https.lua`
+opens the TLS connection itself: `verify = "peer"` against KOReader's bundled
+`data/ca-bundle.crt`, plus a subjectAltName host-name match. In the emulator
+it refused a wrong-host certificate, a self-signed one, a CA not in the
+bundle, and plain HTTP.
 
 ## Future: cloud transfer
 
