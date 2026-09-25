@@ -29,6 +29,7 @@ local GestureRange = require("ui/gesturerange")
 local HorizontalGroup = require("ui/widget/horizontalgroup")
 local HorizontalSpan = require("ui/widget/horizontalspan")
 local ImageWidget = require("ui/widget/imagewidget")
+local InfoMessage = require("ui/widget/infomessage")
 local Library = require("kindleui/ui/library")
 local Perf = require("kindleui/util/perf")
 local Size = require("ui/size")
@@ -63,7 +64,7 @@ function LibraryGrid:init()
     end
     self.tiles = {}
     self:computeLayout()
-    self.books, self.total_books = Library.loadBooks(self.plugin)
+    self.books, self.total_books, self.all_books = Library.loadBooks(self.plugin)
     -- Come back to the page you were on (for this KOReader session).
     self.page = math.max(1, math.min(Library.session.grid_page or 1, self:pageCount()))
     self:buildPage()
@@ -154,7 +155,7 @@ function LibraryGrid:freeImages()
 end
 
 function LibraryGrid:buildPage()
-    self:stopExtraction()
+    if not self.preparing then self:stopExtraction() end
     self:freeImages()
     self.tiles = {}
     self.layout = {}
@@ -253,30 +254,31 @@ end
 
 -- Cover extraction: visible page only, in a child process, while open --------
 
+-- Swaps in the real cover of `path` if that book is on the current page.
+function LibraryGrid:refreshTileFor(path)
+    for __, tile in ipairs(self.tiles) do
+        local book = tile.book
+        if book.path == path then
+            book.title = book.entry.title or book.title
+            book.authors = book.entry.authors or book.authors
+            -- Swap the tile's content in place and refresh just that tile.
+            tile[1] = self:tileContent(book)
+            UIManager:setDirty(self, function() return "ui", tile.dimen end)
+        end
+    end
+end
+
 function LibraryGrid:scheduleExtraction()
-    local items, tile_of = {}, {}
+    local items = {}
     for __, tile in ipairs(self.tiles) do
         if Cache.needsExtraction(tile.book.entry) then
             table.insert(items, { path = tile.book.path, entry = tile.book.entry, w = self.cover_w, h = self.cover_h })
-            tile_of[#items] = tile
         end
     end
     if #items == 0 then return end
     local t0 = Perf.start()
     self.extract_job = Extractor.start(items, {
-        onResult = function(item)
-            for i, it in ipairs(items) do
-                if it == item then
-                    local tile = tile_of[i]
-                    local book = tile.book
-                    book.title = book.entry.title or book.title
-                    book.authors = book.entry.authors or book.authors
-                    -- Swap the tile's content in place and refresh just that tile.
-                    tile[1] = self:tileContent(book)
-                    UIManager:setDirty(self, function() return "ui", tile.dimen end)
-                end
-            end
-        end,
+        onResult = function(item) self:refreshTileFor(item.path) end,
         onDone = function(job)
             Perf.log("covers extracted (child process)", t0, { books = job.done })
             self.extract_job = nil
@@ -284,7 +286,45 @@ function LibraryGrid:scheduleExtraction()
     })
 end
 
+--- Library options → Prepare all covers: every book not extracted yet, in
+-- one child process, while this screen stays open. Progress in the title.
+function LibraryGrid:prepareAll()
+    local items = {}
+    for __, b in ipairs(self.all_books or {}) do
+        if Cache.needsExtraction(b.entry) then
+            table.insert(items, { path = b.path, entry = b.entry, w = self.cover_w, h = self.cover_h })
+        end
+    end
+    if #items == 0 then
+        UIManager:show(InfoMessage:new{ text = _("All covers are ready."), timeout = 3 })
+        return
+    end
+    self:stopExtraction()
+    local t0 = Perf.start()
+    local total, done = #items, 0
+    self.preparing = true
+    self.title_bar:setSubTitle(T(_("Preparing covers: 0 of %1 (keep this screen open)"), total))
+    self.extract_job = Extractor.start(items, {
+        onResult = function(item)
+            done = done + 1
+            self:refreshTileFor(item.path)
+            if done % 5 == 0 or done == total then
+                self.title_bar:setSubTitle(T(_("Preparing covers: %1 of %2 (keep this screen open)"), done, total))
+            end
+        end,
+        onDone = function(job)
+            Perf.log("prepare all covers (child process)", t0, { books = job.done })
+            self.extract_job = nil
+            self.preparing = nil
+            self.title_bar:setSubTitle(Library.subtitle(#self.books, self.total_books))
+            UIManager:show(InfoMessage:new{ text = T(_("Covers ready for %1 books."), job.done), timeout = 3 })
+        end,
+    })
+    if not self.extract_job then self.preparing = nil end
+end
+
 function LibraryGrid:stopExtraction()
+    self.preparing = nil
     if self.extract_job then
         self.extract_job:cancel()
         self.extract_job = nil
@@ -306,7 +346,7 @@ function LibraryGrid:showDetails(book)
 end
 
 function LibraryGrid:reload()
-    self.books, self.total_books = Library.loadBooks(self.plugin)
+    self.books, self.total_books, self.all_books = Library.loadBooks(self.plugin)
     self.page = math.min(self.page, self:pageCount())
     self:buildPage()
     UIManager:setDirty(self, "partial")

@@ -94,7 +94,7 @@ function Library.loadBooks(plugin)
         books = stats.books, shown = #shown, scan_ms = scan_ms, meta_ms = meta_ms,
         sidecar_reads = stats.sidecar_reads, new_entries = stats.new_entries,
     })
-    return shown, #books
+    return shown, #books, books
 end
 
 --- Reading state of a book: "unread" (never opened), "finished", or "reading".
@@ -271,6 +271,16 @@ function Library.showOptions(widget, plugin)
         }})
     end
     table.insert(buttons, {})
+    if widget.prepareAll then
+        table.insert(buttons, {{
+            text = _("Prepare all covers now"),
+            align = "left",
+            callback = function()
+                UIManager:close(dialog)
+                widget:prepareAll()
+            end,
+        }})
+    end
     table.insert(buttons, {{
         text = _("Refresh (re-read all books)"),
         align = "left",
