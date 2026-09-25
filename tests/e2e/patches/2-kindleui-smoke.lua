@@ -340,6 +340,28 @@ local steps = {
         require("kindleui/ui/plugininstall").confirmUndo()
     end },
     { "close undo message", closeTop },
+    { "rotate to the other orientation", function()
+        local FileManager = require("apps/filemanager/filemanager")
+        local Screen = require("device").screen
+        _G.kindleui_smoke_rotation = Screen:getRotationMode()
+        FileManager.instance:onSetRotationMode(require("bit").bxor(_G.kindleui_smoke_rotation, 1))
+    end, 4 },
+    { "home follows the rotation", function()
+        local Screen = require("device").screen
+        local home = top()
+        assert(home.name == "kindleui_home", "top is " .. tostring(home.name))
+        assert(home.dimen.w == Screen:getWidth() and home.dimen.h == Screen:getHeight(), "Home kept the old size")
+        assert(home.landscape == (Screen:getWidth() > Screen:getHeight()), "wrong layout for the orientation")
+        homeFits()
+    end },
+    { "rotate back", function()
+        require("apps/filemanager/filemanager").instance:onSetRotationMode(_G.kindleui_smoke_rotation)
+    end, 4 },
+    { "home back in the first orientation", function()
+        local Screen = require("device").screen
+        assert(top().dimen.w == Screen:getWidth(), "Home kept the rotated size")
+        homeFits()
+    end },
     { "unpin plugins", function()
         local Plugins = require("kindleui/ui/plugins")
         Plugins.setPinned("calibre", false)

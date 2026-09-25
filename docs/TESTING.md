@@ -67,7 +67,12 @@ drives the plugin through its own functions:
   since the emulator runs KOReader as a desktop) the full five-entry panel;
 - Settings;
 - Send Book, including New Code;
-- Send Plugin, and Undo with nothing to undo.
+- Send Plugin, and Undo with nothing to undo;
+- rotating the screen and back: Home follows (size, portrait or two-column
+  landscape layout) and still fits.
+
+The whole run also passes on a landscape screen:
+`KO_W=1680 KO_H=1264 tests/e2e/smoke.sh`.
 
 **Plugin install** (run after installer changes):
 

@@ -32,7 +32,7 @@ Last updated: 2026-09-25. Branch: `claude/kindle-plugin-handoff-wndhwa` of `zaki
   - a read-only folder is refused before the upload starts.
 - Self-updater: GitHub → zip → staging → compile check → swap, with its own TLS peer verification.
 - Unit tests: `tests/run.sh`, all passing (including `test_plugininstaller.lua`).
-- Emulator smoke test: `tests/e2e/smoke.sh`, 54 steps, passing.
+- Emulator smoke test: `tests/e2e/smoke.sh`, 58 steps, passing.
 - **Install plugin from phone (ROADMAP #21):**
   - `util/pluginzip.lua` (pure zip analysis) and `util/plugininstaller.lua`
     (stage → compile check → swap; a replaced version is kept as
@@ -97,11 +97,20 @@ Last updated: 2026-09-25. Branch: `claude/kindle-plugin-handoff-wndhwa` of `zaki
   book with `ReadCollection:addItem` and writes at once. Checked end to end
   with headless Chromium (`COLLECTION="To read" node tests/e2e/phone.js …`).
 
-## Next, in ranked order (see docs/ROADMAP.md)
+- **Landscape Home (ROADMAP #20):** two columns (reading left, navigation
+  and pinned plugins right) when the screen is wider than tall. Home now
+  rebuilds itself after a rotation (`KindleUI:onSetDimensions`, sent by
+  KOReader's file browser when it re-lays out). Library, Installed Plugins
+  and Send Book do not re-lay out if rotated while open (they are usually
+  closed when rotating from Settings); they are right the next time they open.
 
-- #20 landscape Home
+## Next
 
-ROADMAP: #9–19 and #21 are marked ✅, #20 is 🔜.
+The ranked list (#1–21) is done and no 💡 ideas are left in
+docs/ROADMAP.md. What remains is checking on a real Kindle (see "Not
+verified on a real Kindle" below and docs/TESTING.md, section 3).
+
+ROADMAP: #1–21 are all marked ✅.
 
 ## Working notes
 

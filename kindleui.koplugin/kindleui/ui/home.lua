@@ -226,10 +226,15 @@ function Home:_build(fit)
     local margin = Common.SIDE_MARGIN
     local inner_w = w - 2 * margin
     local padding_top = self:_gap(30)
+    -- Landscape: reading on the left, navigation on the right.
+    self.landscape = self.dimen.w > self.dimen.h
 
-    local vgroup = VerticalGroup:new{ align = "left" }
-    local function add(widget) table.insert(vgroup, widget) end
-    local function space(n) add(VerticalSpan:new{ width = n }) end
+    local function column()
+        local g = VerticalGroup:new{ align = "left" }
+        return g, function(widget) table.insert(g, widget) end,
+            function(n) table.insert(g, VerticalSpan:new{ width = n }) end
+    end
+    local vgroup, add, space = column()
 
     -- Title on the left, status (time · Wi-Fi · battery) on the right.
     local status = self:_statusText()
@@ -250,14 +255,24 @@ function Home:_build(fit)
     add(Common.line(inner_w, true))
     space(self:_gap(22))
 
-    add(Common.label(_("Continue Reading"), inner_w))
-    space(self:_gap(10))
-    local continue_widget, continue_focus = self:_continueReading(inner_w)
-    add(continue_widget)
+    local col_gap = Screen:scaleBySize(36)
+    local left_w = self.landscape and math.floor((inner_w - col_gap) * 0.56) or inner_w
+    local right_w = self.landscape and (inner_w - col_gap - left_w) or inner_w
+    local left, ladd, lspace = vgroup, add, space
+    local right, radd, rspace = vgroup, add, space
+    if self.landscape then
+        left, ladd, lspace = column()
+        right, radd, rspace = column()
+    end
+
+    ladd(Common.label(_("Continue Reading"), left_w))
+    lspace(self:_gap(10))
+    local continue_widget, continue_focus = self:_continueReading(left_w)
+    ladd(continue_widget)
     self.layout = { { continue_focus } }
-    local shown = self:_moreReading(add, space, inner_w, fit.more)
-    if fit.recent then self:_recentlyAdded(add, space, inner_w, shown) end
-    space(self:_gap(34))
+    local shown = self:_moreReading(ladd, lspace, left_w, fit.more)
+    if fit.recent then self:_recentlyAdded(ladd, lspace, left_w, shown) end
+    if not self.landscape then space(self:_gap(34)) end
 
     local nav = {
         { _("My Library"), function() self.plugin:showLibrary() end },
@@ -265,12 +280,12 @@ function Home:_build(fit)
         { _("Installed Plugins"), function() self.plugin:showPlugins() end },
         { _("Settings"), function() self.plugin:showSettings() end },
     }
-    add(Common.line(inner_w))
+    radd(Common.line(right_w))
     for __, entry in ipairs(nav) do
         local btn = Button:new{
             text = entry[1],
             callback = entry[2],
-            width = inner_w,
+            width = right_w,
             align = "left",
             bordersize = 0,
             padding_h = 0,
@@ -280,11 +295,20 @@ function Home:_build(fit)
             text_font_bold = false,
             show_parent = self,
         }
-        add(btn)
-        add(Common.line(inner_w))
+        radd(btn)
+        radd(Common.line(right_w))
         table.insert(self.layout, { btn })
     end
-    self:_pinnedPlugins(add, space, inner_w)
+    self:_pinnedPlugins(radd, rspace, right_w)
+
+    if self.landscape then
+        add(HorizontalGroup:new{
+            align = "top",
+            left,
+            HorizontalSpan:new{ width = col_gap },
+            right,
+        })
+    end
 
     self[1] = FrameContainer:new{
         width = w,
@@ -394,6 +418,17 @@ function Home:_recentlyAdded(add, space, inner_w, shown)
     end
     add(row)
     table.insert(self.layout, layout_row)
+end
+
+--- The screen was rotated (KOReader rebuilt its file browser): rebuild
+-- Home for the new size, portrait or landscape.
+function Home:onScreenResize()
+    self.dimen = Geom:new{ x = 0, y = 0, w = Screen:getWidth(), h = Screen:getHeight() }
+    if self.ges_events.Swipe then
+        self.ges_events.Swipe = { GestureRange:new{ ges = "swipe", range = self.dimen } }
+    end
+    self:build()
+    UIManager:setDirty(self, "full")
 end
 
 function Home:showQuickSettings()

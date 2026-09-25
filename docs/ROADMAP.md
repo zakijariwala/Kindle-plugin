@@ -33,7 +33,7 @@ checked in the KOReader emulator before the next.
 | 17 | Quick settings panel (frontlight, warmth, night mode, Wi-Fi) | medium | ✅ |
 | 18 | Time left in book (only with the Statistics plugin) | medium | ✅ |
 | 19 | Send Book into a collection | medium (after 14) | ✅ |
-| 20 | Landscape layout for Home | medium | 🔜 |
+| 20 | Landscape layout for Home | medium | ✅ |
 | 21 | Install plugin from phone | large | ✅ |
 
 Dropped after a closer look:
@@ -103,8 +103,8 @@ ever written into the plugins folder:
 | ✅ | **Series grouping** | Library ☰ → *Group series*: each series of 2+ books becomes one tile (volume 1's cover, "▸ N books"), placed where its first book falls in the current sort. Tap it to see the series in reading order (series index, then title); ✕ / Back returns. Series come from KOReader's metadata (sidecar for opened books, the book itself for the others). Selection mode shows the books individually. | Cheap: series is stored in the library cache. Existing cache entries are upgraded once as they are looked at (sidecar re-read; never-opened books are re-extracted with their page). |
 | ✅ | **Hold menu on a cover** (Library grid and list, and every book on Home): Reading / On hold / Finished, Reset (mark as unread)…, Remove from Continue Reading, Book details, Delete book… | Status, Reset and Delete are KOReader's own buttons and dialogs (`filemanagerutil`, `FileManager:showDeleteFileDialog`), so they also clean the sidecar, history and collections. Removing the book in Continue Reading moves the next book of the history there. | Cheap; Reset and Delete ask for confirmation. |
 | ✅ | **Remember the page** you were on when coming back to the Library | Keep the page number in memory for the session. | Free. |
-| 💡 | **Prepare all covers now** (Library options) | Run the existing child-process extractor over every book once, e.g. while charging. The user starts it; it stops when the Library closes. | Heavy but explicit and one-off; memory stays flat (child process). |
-| 💡 | **Faster e-ink page turns** in the grid | Use a fast refresh for page turns and a full refresh every N turns to clear ghosting. | Improves perceived speed. |
+| ✅ | **Prepare all covers now** (Library options) | Run the existing child-process extractor over every book once, e.g. while charging. The user starts it; it stops when the Library closes. | Heavy but explicit and one-off; memory stays flat (child process). |
+| ✅ | **Faster e-ink page turns** in the grid | Use a fast refresh for page turns and a full refresh every N turns to clear ghosting. | Improves perceived speed. |
 
 ## Send Book
 
@@ -119,7 +119,7 @@ ever written into the plugins folder:
 | Status | Feature | How | Cost |
 | --- | --- | --- | --- |
 | ✅ | **Text size for Home and Library** (Small / Medium / Large) | One setting scaling the few fonts used. | Free. |
-| 💡 | **Landscape layouts** tuned for Home | The grid already supports 5×2; Home needs a two-column variant. | Free. |
+| ✅ | **Landscape layouts** tuned for Home | Two columns: Continue Reading, more books and Recently added on the left; navigation and pinned plugins on the right. Home re-lays itself out after a rotation. The grid is 5×2. | Free. |
 | ❌ | **Page-flip keys** on Home/Library for Kindles with buttons (Oasis) | Already mapped for the grid; add Home. | Free. |
 
 ## Not planned (on purpose)

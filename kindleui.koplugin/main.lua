@@ -21,6 +21,7 @@ local InfoMessage = require("ui/widget/infomessage")
 local UIManager = require("ui/uimanager")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local logger = require("logger")
+local Screen = require("device").screen
 local _ = require("gettext")
 
 local Books = require("kindleui/util/books")
@@ -171,6 +172,17 @@ function KindleUI:onChildClosed()
     if shell.home_dirty and shell.home and UIManager:isWidgetShown(shell.home) then
         shell.home_dirty = false
         shell.home:refresh()
+    end
+end
+
+-- KOReader rebuilt the file browser for a new screen size (rotation).
+function KindleUI:onSetDimensions()
+    local home = shell.home
+    if home and UIManager:isWidgetShown(home)
+            and (home.dimen.w ~= Screen:getWidth() or home.dimen.h ~= Screen:getHeight()) then
+        UIManager:nextTick(function()
+            if UIManager:isWidgetShown(home) then home:onScreenResize() end
+        end)
     end
 end
 
