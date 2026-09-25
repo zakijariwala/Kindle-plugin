@@ -27,8 +27,8 @@ checked in the KOReader emulator before the next.
 | 11 | Prepare all covers now | small (reuses the extractor) | ✅ |
 | 12 | Last 2–3 books you're reading on Home | medium | ✅ |
 | 13 | Hold menu on a cover: mark read/unread, remove from Continue Reading, delete, details | medium | ✅ |
-| 14 | Collections (KOReader's own) as a Library filter | medium | 🔜 |
-| 15 | Multi-select and batch actions (Library + Installed Plugins) | medium | |
+| 14 | Collections (KOReader's own) as a Library filter | medium | ✅ |
+| 15 | Multi-select and batch actions (Library + Installed Plugins) | medium | 🔜 |
 | 16 | Series grouping | medium | |
 | 17 | Quick settings panel (frontlight, warmth, night mode, Wi-Fi) | medium | |
 | 18 | Time left in book (only with the Statistics plugin) | medium | |
@@ -99,7 +99,7 @@ ever written into the plugins folder:
 | --- | --- | --- | --- |
 | ✅ | **Filter: All / Unread / Reading / Finished** | Filter the in-memory book list (status is already cached). | Cheap. |
 | ✅ | **Search** by title/author | On-screen keyboard; filter the in-memory list, no disk access. | Cheap. |
-| 💡 | **Collections** (Kindle "Collections") | Use KOReader's own collections (the same ones as KOReader's file browser), shown as a filter. No second system. | Cheap. |
+| ✅ | **Collections** (Kindle "Collections") | KOReader's own collections (the same ones as its file browser). Library ☰ → *Collection: …* picks one (with book counts) or all books; it combines with the reading-state filter and search, and shows in the subtitle. A book's hold menu has KOReader's own **Collections…** chooser (add/remove); the change is saved at once (KOReader itself writes `collection.lua` only when its file browser closes). A collection that was deleted falls back to all books. Books of a collection outside the home folder are not shown (the Library only lists the home folder). | Cheap: KOReader keeps collections in memory; one table lookup per book, only while a collection is selected. |
 | 💡 | **Series grouping** | Group by the series name from book metadata. | Cheap once metadata is extracted. |
 | ✅ | **Hold menu on a cover** (Library grid and list, and every book on Home): Reading / On hold / Finished, Reset (mark as unread)…, Remove from Continue Reading, Book details, Delete book… | Status, Reset and Delete are KOReader's own buttons and dialogs (`filemanagerutil`, `FileManager:showDeleteFileDialog`), so they also clean the sidecar, history and collections. Removing the book in Continue Reading moves the next book of the history there. | Cheap; Reset and Delete ask for confirmation. |
 | ✅ | **Remember the page** you were on when coming back to the Library | Keep the page number in memory for the session. | Free. |

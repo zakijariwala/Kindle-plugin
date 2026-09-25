@@ -41,10 +41,39 @@ local steps = {
     { "grid prepare all covers", function() top():prepareAll() end, 12 },
     { "grid options dialog", function() require("kindleui/ui/library").showOptions(top(), plugin()) end },
     { "close options", closeTop },
+    { "grid: collection filter", function()
+        local ReadCollection = require("readcollection")
+        if not ReadCollection.coll["Smoke"] then ReadCollection:addCollection("Smoke") end
+        local grid = top()
+        local picked = { grid.tiles[1].book.path, grid.tiles[2].book.path }
+        for __, f in ipairs(picked) do ReadCollection:addItem(f, "Smoke") end
+        ReadCollection:write({ Smoke = true })
+        local Library = require("kindleui/ui/library")
+        local found
+        for __, c in ipairs(Library.collections(plugin())) do if c.name == "Smoke" then found = c end end
+        assert(found and found.count == 2, "collection not listed with 2 books")
+        Library.chooseCollection(grid, plugin())
+        assert(top().buttons, "no collection chooser")
+        closeTop()
+        setting("library_collection", "Smoke")
+        grid:reload()
+        assert(#grid.books == 2, "books shown: " .. #grid.books)
+        assert(Library.subtitle(#grid.books, grid.total_books):find("Smoke", 1, true), "subtitle lacks the collection")
+        setting("library_collection", "gone")
+        grid:reload()
+        assert(#grid.books == grid.total_books, "a missing collection must show all books")
+        setting("library_collection", nil)
+        grid:reload()
+    end },
     { "grid: hold a cover (book menu)", function()
         local grid = top()
         grid:showDetails(grid.tiles[1].book)
         assert(top().buttons, "no book menu")
+        local has_coll
+        for __, row in ipairs(top().buttons) do
+            for __, btn in ipairs(row) do if btn.text == require("gettext")("Collections…") then has_coll = true end end
+        end
+        assert(has_coll, "no Collections… button")
     end },
     { "close book menu", closeTop },
     { "grid: delete a book from the menu", function()

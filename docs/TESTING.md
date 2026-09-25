@@ -41,7 +41,9 @@ tests/e2e/smoke.sh
 An emulator-only KOReader patch (`tests/e2e/patches/2-kindleui-smoke.lua`)
 drives the plugin through its own functions:
 - leaving a book → Home;
-- Library grid: page turns, filter, search, Prepare all covers, options,
+- Library grid: page turns, filter, search, collection filter (a collection
+  made by the patch, the chooser, the subtitle, and a deleted collection
+  falling back to all books), Prepare all covers, options,
   the hold menu, and deleting a book through it (file, cache entry and tile
   gone);
 - list view and sorting, and its hold menu;

@@ -18,6 +18,7 @@ local DEFAULTS = {
     library_sort = "recent",       -- "recent" | "title" | "author" | "added"
     library_view = "covers",       -- "covers" | "list"
     library_filter = "all",        -- "all" | "unread" | "reading" | "finished"
+    library_collection = nil,      -- name of a KOReader collection to show, nil = all books
     home_recent = true,            -- "Recently added" row on Home
     home_more_reading = true,      -- up to 2 more books being read, under Continue Reading
     text_size = "medium",          -- "small" | "medium" | "large" (Home, Library, Send Book)

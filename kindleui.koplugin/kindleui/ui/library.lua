@@ -7,6 +7,9 @@ from `Library.loadBooks`, which scans the home folder and fills in metadata
 from the plugin's own cache (util/librarycache.lua), so opening the Library
 does not re-read every book's sidecar.
 
+Collections are KOReader's own (readcollection.lua, the same ones as its file
+browser); the Library only shows one of them as a filter.
+
 @module kindleui.ui.library
 ]]
 
@@ -89,7 +92,8 @@ function Library.loadBooks(plugin)
     end
     table.sort(books, cmp)
     Cache.save()
-    local shown = Library.applySearch(Library.applyFilter(books, Config.get("library_filter")), Library.session.search)
+    local shown = Library.applyCollection(books, Library.currentCollection())
+    shown = Library.applySearch(Library.applyFilter(shown, Config.get("library_filter")), Library.session.search)
     Perf.log("library data", t0, {
         books = stats.books, shown = #shown, scan_ms = scan_ms, meta_ms = meta_ms,
         sidecar_reads = stats.sidecar_reads, new_entries = stats.new_entries,
@@ -112,6 +116,104 @@ function Library.applyFilter(books, filter)
         if Library.readingState(b) == filter then table.insert(out, b) end
     end
     return out
+end
+
+-- Collections ------------------------------------------------------------------
+
+local function readCollection()
+    local ok, ReadCollection = pcall(require, "readcollection")
+    if not ok or type(ReadCollection) ~= "table" then return nil end
+    pcall(ReadCollection._read, ReadCollection) -- re-reads only if the file changed
+    return ReadCollection.coll and ReadCollection or nil
+end
+
+--- Display name of a collection ("favorites" is KOReader's Favorites).
+function Library.collectionTitle(name, plugin)
+    local fmc = plugin and plugin.ui and plugin.ui.collections
+    if fmc and fmc.getCollectionTitle then
+        local ok, title = pcall(fmc.getCollectionTitle, fmc, name)
+        if ok and title then return title end
+    end
+    local RC = readCollection()
+    if RC and name == RC.default_collection_name then return _("Favorites") end
+    return name
+end
+
+--- KOReader's collections: array of { name, title, count }, in KOReader's order.
+function Library.collections(plugin)
+    local RC = readCollection()
+    if not RC then return {} end
+    local list = {}
+    for name, coll in pairs(RC.coll) do
+        local n = 0
+        for __ in pairs(coll) do n = n + 1 end
+        local settings = RC.coll_settings and RC.coll_settings[name] or {}
+        table.insert(list, { name = name, title = Library.collectionTitle(name, plugin), count = n, order = settings.order or 0 })
+    end
+    table.sort(list, function(a, b)
+        if a.order ~= b.order then return a.order < b.order end
+        return a.title < b.title
+    end)
+    return list
+end
+
+--- The collection the Library shows, or nil (all books). A collection that no
+-- longer exists counts as nil.
+function Library.currentCollection()
+    local name = Config.get("library_collection")
+    if not name then return nil end
+    local RC = readCollection()
+    if not RC or not RC.coll[name] then return nil end
+    return name
+end
+
+--- Books in collection `name` (all books when nil).
+function Library.applyCollection(books, name)
+    if not name then return books end
+    local RC = readCollection()
+    local coll = RC and RC.coll[name]
+    if not coll then return books end
+    local out = {}
+    for __, b in ipairs(books) do
+        -- KOReader stores real paths; most books match directly.
+        if coll[b.path] or coll[ffiUtil.realpath(b.path) or ""] then table.insert(out, b) end
+    end
+    return out
+end
+
+--- Lets the user pick the collection to show.
+function Library.chooseCollection(widget, plugin)
+    local dialog
+    local current = Library.currentCollection()
+    local function pick(name)
+        UIManager:close(dialog)
+        Config.set("library_collection", name)
+        Library.session.grid_page, Library.session.list_page = 1, 1
+        widget.page = 1
+        widget:reload()
+    end
+    local buttons = {{{
+        text = (current == nil and "✓ " or "") .. _("All books"),
+        callback = function() pick(nil) end,
+    }}}
+    for __, c in ipairs(Library.collections(plugin)) do
+        table.insert(buttons, {{
+            text = (current == c.name and "✓ " or "") .. T("%1 (%2)", c.title, c.count),
+            callback = function() pick(c.name) end,
+        }})
+    end
+    if #buttons == 1 then
+        table.insert(buttons, {{
+            text = _("No collections yet. Hold a book → Collections…"),
+            enabled = false,
+        }})
+    end
+    dialog = ButtonDialog:new{
+        title = _("Show collection"),
+        title_align = "center",
+        buttons = buttons,
+    }
+    UIManager:show(dialog)
 end
 
 --- Books whose title or author contains `query` (case-insensitive).
@@ -158,13 +260,17 @@ function Library.subtitle(shown, total)
     if Library.session.search then
         return T(_("“%1”: %2 of %3"), Library.session.search, shown, total)
     end
+    local parts = {}
+    local coll = Library.currentCollection()
+    if coll then table.insert(parts, Library.collectionTitle(coll)) end
     local filter = Config.get("library_filter")
     if filter and filter ~= "all" then
         for __, f in ipairs(FILTERS) do
-            if f.id == filter then
-                return T(_("%1 of %2 · %3"), shown, total, f.text)
-            end
+            if f.id == filter then table.insert(parts, f.text) end
         end
+    end
+    if #parts > 0 then
+        return T(_("%1 of %2 · %3"), shown, total, table.concat(parts, " · "))
     end
     return T(_("%1 books"), total)
 end
@@ -175,6 +281,9 @@ function Library.emptyText(total)
         return T(_("No books match “%1”.\nClear the search with the ☰ button (top left)."), Library.session.search)
     end
     if total and total > 0 then
+        if Library.currentCollection() then
+            return _("No books of this collection match.\nChange the collection or filter with the ☰ button (top left).")
+        end
         return _("No books match this filter.\nChange it with the ☰ button (top left).")
     end
     return _("No books yet.\nUse Send Book on the Home screen to add one.")
@@ -235,6 +344,14 @@ function Library.showOptions(widget, plugin)
         })
     end
     table.insert(buttons, filter_row)
+    local coll = Library.currentCollection()
+    table.insert(buttons, {{
+        text = coll and T(_("Collection: %1…"), Library.collectionTitle(coll, plugin)) or _("Collection: all books…"),
+        callback = function()
+            UIManager:close(dialog)
+            Library.chooseCollection(widget, plugin)
+        end,
+    }})
     local search_row = {{
         text = Library.session.search and T(_("Search: “%1”…"), Library.session.search) or _("Search…"),
         callback = function()

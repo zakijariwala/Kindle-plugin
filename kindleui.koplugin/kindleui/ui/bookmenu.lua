@@ -3,6 +3,7 @@ The menu shown when a book is held (Library cover or list row, Home):
 
     Reading · On hold · Finished        KOReader's own status buttons
     Reset (mark as unread)…             KOReader's own Reset (it confirms)
+    Collections…                        KOReader's own collection chooser (add/remove)
     Remove from Continue Reading        only if the book is in the history
     Book details
     Delete book…                        KOReader's own delete (it confirms and
@@ -72,6 +73,19 @@ function BookMenu.show(o)
     end
 
     local buttons = { status_row, { reset } }
+    local fmc = o.plugin and o.plugin.ui and o.plugin.ui.collections
+    if fmc and fmc.genAddToCollectionButton then
+        local function saved()
+            -- KOReader writes collection.lua only when its file browser
+            -- closes; save now so a crash or power loss cannot lose it.
+            pcall(function() require("readcollection"):write({ [1] = true }) end)
+            changed()
+        end
+        local ok, btn = pcall(fmc.genAddToCollectionButton, fmc, o.path, close, saved)
+        if ok and btn then
+            table.insert(buttons, { btn })
+        end
+    end
     if BookMenu.inHistory(o.path) then
         table.insert(buttons, {{
             text = _("Remove from Continue Reading"),
