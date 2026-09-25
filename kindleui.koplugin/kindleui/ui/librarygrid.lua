@@ -8,7 +8,7 @@ cover is extracted afterwards, *in a child process, only for the page on
 screen, only while this screen is open*, and swapped in place. Nothing keeps
 running once the Library is closed.
 
-Tap a cover to open the book; hold it for its KOReader book details.
+Tap a cover to open the book; hold it for the book menu (ui/bookmenu.lua).
 Swipe left/right (or the arrows) to turn pages.
 
 @module kindleui.ui.librarygrid
@@ -339,10 +339,14 @@ function LibraryGrid:openBook(book)
 end
 
 function LibraryGrid:showDetails(book)
-    local ui = self.plugin and self.plugin.ui
-    if ui and ui.bookinfo then
-        ui.bookinfo:show(book.path)
-    end
+    require("kindleui/ui/bookmenu").show{
+        plugin = self.plugin,
+        path = book.path,
+        title = book.title,
+        on_change = function()
+            if UIManager:isWidgetShown(self) then self:reload() end
+        end,
+    }
 end
 
 function LibraryGrid:reload()

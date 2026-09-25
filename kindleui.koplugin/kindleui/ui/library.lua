@@ -342,6 +342,7 @@ function Library.List:buildItems()
             text = b.authors and (b.title .. " — " .. b.authors) or b.title,
             mandatory = Library.progressText(b),
             file = b.path,
+            book_title = b.title,
         })
     end
     if #items == 0 then
@@ -371,6 +372,20 @@ function Library.List:onMenuChoice(item)
         UIManager:close(self)
         self.plugin:openBook(item.file)
     end
+    return true
+end
+
+-- Hold a book: the book menu (status, reset, delete, details).
+function Library.List:onMenuHold(item)
+    if not item.file then return true end
+    require("kindleui/ui/bookmenu").show{
+        plugin = self.plugin,
+        path = item.file,
+        title = item.book_title,
+        on_change = function()
+            if UIManager:isWidgetShown(self) then self:reload() end
+        end,
+    }
     return true
 end
 

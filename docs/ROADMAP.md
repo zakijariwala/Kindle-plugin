@@ -26,8 +26,8 @@ checked in the KOReader emulator before the next.
 | 10 | Faster e-ink page turns in the grid | small (tuning needs a device) | ✅ |
 | 11 | Prepare all covers now | small (reuses the extractor) | ✅ |
 | 12 | Last 2–3 books you're reading on Home | medium | ✅ |
-| 13 | Hold menu on a cover: mark read/unread, remove from Continue Reading, delete, details | medium | 🔜 |
-| 14 | Collections (KOReader's own) as a Library filter | medium | |
+| 13 | Hold menu on a cover: mark read/unread, remove from Continue Reading, delete, details | medium | ✅ |
+| 14 | Collections (KOReader's own) as a Library filter | medium | 🔜 |
 | 15 | Multi-select and batch actions (Library + Installed Plugins) | medium | |
 | 16 | Series grouping | medium | |
 | 17 | Quick settings panel (frontlight, warmth, night mode, Wi-Fi) | medium | |
@@ -101,7 +101,7 @@ ever written into the plugins folder:
 | ✅ | **Search** by title/author | On-screen keyboard; filter the in-memory list, no disk access. | Cheap. |
 | 💡 | **Collections** (Kindle "Collections") | Use KOReader's own collections (the same ones as KOReader's file browser), shown as a filter. No second system. | Cheap. |
 | 💡 | **Series grouping** | Group by the series name from book metadata. | Cheap once metadata is extracted. |
-| 💡 | **Hold menu on a cover**: Mark as read/unread, Remove from Continue Reading, Delete book, Book details | Status and deletion through KOReader's own functions (they also clean the sidecar). | Cheap; delete asks for confirmation. |
+| ✅ | **Hold menu on a cover** (Library grid and list, and every book on Home): Reading / On hold / Finished, Reset (mark as unread)…, Remove from Continue Reading, Book details, Delete book… | Status, Reset and Delete are KOReader's own buttons and dialogs (`filemanagerutil`, `FileManager:showDeleteFileDialog`), so they also clean the sidecar, history and collections. Removing the book in Continue Reading moves the next book of the history there. | Cheap; Reset and Delete ask for confirmation. |
 | ✅ | **Remember the page** you were on when coming back to the Library | Keep the page number in memory for the session. | Free. |
 | 💡 | **Prepare all covers now** (Library options) | Run the existing child-process extractor over every book once, e.g. while charging. The user starts it; it stops when the Library closes. | Heavy but explicit and one-off; memory stays flat (child process). |
 | 💡 | **Faster e-ink page turns** in the grid | Use a fast refresh for page turns and a full refresh every N turns to clear ghosting. | Improves perceived speed. |

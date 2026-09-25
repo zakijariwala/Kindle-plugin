@@ -161,6 +161,7 @@ function Home:_continueReading(inner_w)
 
     local card = Common.Tappable:new{
         callback = function() self.plugin:openBook(file) end,
+        hold_callback = function() self:showBookMenu(file, info.title) end,
         FrameContainer:new{
             bordersize = border,
             radius = Size.radius.window,
@@ -326,8 +327,10 @@ function Home:_moreReading(add, space, inner_w, max_rows)
             table.insert(overlap, RightContainer:new{ dimen = Geom:new{ w = row_w, h = row_h }, pct_widget })
         end
         local file = it.file
+        local book_title = it.entry.title
         local row = Common.Tappable:new{
             callback = function() self.plugin:openBook(file) end,
+            hold_callback = function() self:showBookMenu(file, book_title) end,
             FrameContainer:new{ bordersize = 0, padding = edge, overlap },
         }
         add(row)
@@ -364,8 +367,10 @@ function Home:_recentlyAdded(add, space, inner_w, shown)
             cover = Common.textCover(it.entry.title or filemanagerutil.splitFileNameType(it.path), nil, w, h)
         end
         local path = it.path
+        local tile_title = it.entry.title
         local tile = Common.Tappable:new{
             callback = function() self.plugin:openBook(path) end,
+            hold_callback = function() self:showBookMenu(path, tile_title) end,
             cover,
         }
         table.insert(row, tile)
@@ -373,6 +378,18 @@ function Home:_recentlyAdded(add, space, inner_w, shown)
     end
     add(row)
     table.insert(self.layout, layout_row)
+end
+
+--- Hold a book on Home: the book menu; Home is rebuilt after a change.
+function Home:showBookMenu(path, title)
+    require("kindleui/ui/bookmenu").show{
+        plugin = self.plugin,
+        path = path,
+        title = title,
+        on_change = function()
+            if UIManager:isWidgetShown(self) then self:refresh() end
+        end,
+    }
 end
 
 -- "9:42 · Wi-Fi · ▯ 83%": read once when Home is built (no clock timer).

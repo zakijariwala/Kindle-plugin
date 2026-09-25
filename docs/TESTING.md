@@ -41,14 +41,17 @@ tests/e2e/smoke.sh
 An emulator-only KOReader patch (`tests/e2e/patches/2-kindleui-smoke.lua`)
 drives the plugin through its own functions:
 - leaving a book → Home;
-- Library grid: page turns, filter, search, Prepare all covers, options;
-- list view and sorting;
+- Library grid: page turns, filter, search, Prepare all covers, options,
+  the hold menu, and deleting a book through it (file, cache entry and tile
+  gone);
+- list view and sorting, and its hold menu;
 - Installed Plugins: opening a plugin's menu, pinning;
 - Home refresh with pinned plugins and Recently added, at all three text sizes,
   each time checking that Home fits the screen (the log shows which optional
   parts were kept);
 - other books being read on Home (reading history filled by the patch), in
-  history order, and switched off;
+  history order, and switched off; marking one Finished from its hold menu
+  (it leaves the rows); removing the Continue Reading book from the history;
 - Settings;
 - Send Book, including New Code;
 - Send Plugin, and Undo with nothing to undo.

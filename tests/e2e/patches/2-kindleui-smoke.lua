@@ -41,9 +41,41 @@ local steps = {
     { "grid prepare all covers", function() top():prepareAll() end, 12 },
     { "grid options dialog", function() require("kindleui/ui/library").showOptions(top(), plugin()) end },
     { "close options", closeTop },
+    { "grid: hold a cover (book menu)", function()
+        local grid = top()
+        grid:showDetails(grid.tiles[1].book)
+        assert(top().buttons, "no book menu")
+    end },
+    { "close book menu", closeTop },
+    { "grid: delete a book from the menu", function()
+        local grid = top()
+        local book
+        for __, t in ipairs(grid.tiles) do if t.book.path:find("Book 060", 1, true) then book = t.book end end
+        book = book or grid.tiles[#grid.tiles].book
+        _G.kindleui_smoke_deleted = book.path
+        grid:showDetails(book)
+        local menu = top()
+        menu.buttons[#menu.buttons][1].callback() -- Delete book…
+        local confirm = top()
+        assert(confirm.ok_callback, "no delete confirmation")
+        UIManager:close(confirm)
+        confirm.ok_callback()
+    end, 2 },
+    { "deleted book is gone", function()
+        local path = _G.kindleui_smoke_deleted
+        assert(not require("libs/libkoreader-lfs").attributes(path), "file still there")
+        assert(not require("kindleui/util/librarycache").entries[path], "still in the cache")
+        for __, t in ipairs(top().tiles) do assert(t.book.path ~= path, "still in the grid") end
+    end },
     { "close grid", closeTop },
     { "library list", function() setting("library_view", "list") plugin():showLibrary() assert(top().name == "kindleui_library") end },
     { "list sort by title", function() setting("library_sort", "title") top():reload() end },
+    { "list: hold a book (book menu)", function()
+        local list = top()
+        list:onMenuHold(list.item_table[1])
+        assert(top().buttons, "no book menu")
+    end },
+    { "close list book menu", closeTop },
     { "close list", function() closeTop() setting("library_view", "covers") setting("library_sort", "recent") end },
     { "installed plugins", function() plugin():showPlugins() assert(top().name == "kindleui_plugins") end },
     { "open a plugin menu", function()
@@ -74,6 +106,27 @@ local steps = {
         assert(#rows >= 1, "no rows (fit level " .. top().fit.more .. ")")
         assert(rows[1].file:find("Book 002", 1, true), "order: " .. rows[1].file)
         if rows[2] then assert(rows[2].file:find("Book 003", 1, true), "order: " .. rows[2].file) end
+    end },
+    { "book menu from a Home row: mark finished", function()
+        local rows = top().more_reading
+        local target = rows[#rows].file -- Book 002 or 003
+        top():showBookMenu(target, "x")
+        local dialog = top()
+        assert(dialog.buttons and dialog.buttons[1][3], "status row missing")
+        dialog.buttons[1][3].callback() -- Finished
+        plugin():showHome()
+        for __, r in ipairs(top().more_reading) do assert(r.file ~= target, "finished book still listed") end
+        _G.kindleui_smoke_finished = target
+    end },
+    { "book menu: remove from Continue Reading", function()
+        local BookMenu = require("kindleui/ui/bookmenu")
+        local last = G_reader_settings:readSetting("lastfile")
+        assert(BookMenu.inHistory(last), "last book not in history")
+        BookMenu.removeFromHistory(last)
+        assert(G_reader_settings:readSetting("lastfile") ~= last, "Continue Reading not moved on")
+        assert(not BookMenu.inHistory(last), "still in history")
+        plugin():showHome()
+        homeFits()
     end },
     { "home: more books being read off", function()
         setting("home_more_reading", false)

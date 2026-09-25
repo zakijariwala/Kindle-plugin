@@ -177,6 +177,28 @@ function Cache.recent(n, exclude)
     return out
 end
 
+--- Makes the next read of this book re-read its sidecar (status or progress
+-- was just changed through KOReader).
+function Cache.invalidate(path)
+    Cache.load()
+    local e = Cache.entries[path]
+    if e then
+        e.sdr = nil
+        Cache.dirty = true
+    end
+end
+
+--- Forgets a deleted book, and its thumbnail.
+function Cache.forget(path)
+    Cache.load()
+    local e = Cache.entries[path]
+    if not e then return end
+    if e.cover then os.remove(coverDir() .. "/" .. e.cover) end
+    Cache.entries[path] = nil
+    Cache.dirty = true
+    Cache.save()
+end
+
 --- Drops everything (Library → Refresh), including thumbnails.
 function Cache.clear()
     Cache.load()

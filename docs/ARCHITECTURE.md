@@ -64,6 +64,7 @@ kindleui.koplugin/
     ├── config.lua            defaults + G_reader_settings["kindleui"]
     ├── ui/
     │   ├── common.lua        fonts, lines, Tappable, single-tab TouchMenu helper
+    │   ├── bookmenu.lua      hold menu of a book (KOReader's status/reset/delete)
     │   ├── home.lua          Home (FocusManager: works with keys too)
     │   ├── library.lua       data loading + sort + options dialog + list view
     │   ├── librarygrid.lua   cover grid view (default)
@@ -106,7 +107,8 @@ tests run them without KOReader.
 KOReader starts / a book is closed → new FileManager → plugin init → nextTick: Home
 Home ─ Continue Reading ─→ FileManager:openFile ─→ reader
      ─ My Library ───────→ cover grid (or list) ─ tap ─→ reader
-                                                 ─ hold ─→ KOReader book details
+                                                 ─ hold ─→ book menu (status, reset, remove from
+                                                            Continue Reading, details, delete)
                                                  ─ ☰ ─→ view, sort, refresh, "Browse all files (KOReader)"
      ─ + Send Book ──────→ TransferScreen
      ─ Installed Plugins ─→ list ─ tap ─→ that plugin's own menu (TouchMenu)

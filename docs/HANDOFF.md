@@ -32,7 +32,7 @@ Last updated: 2026-09-25. Branch: `claude/kindle-plugin-handoff-wndhwa` of `zaki
   - a read-only folder is refused before the upload starts.
 - Self-updater: GitHub → zip → staging → compile check → swap, with its own TLS peer verification.
 - Unit tests: `tests/run.sh`, all passing (including `test_plugininstaller.lua`).
-- Emulator smoke test: `tests/e2e/smoke.sh`, 37 steps, passing.
+- Emulator smoke test: `tests/e2e/smoke.sh`, 44 steps, passing.
 - **Install plugin from phone (ROADMAP #21):**
   - `util/pluginzip.lua` (pure zip analysis) and `util/plugininstaller.lua`
     (stage → compile check → swap; a replaced version is kept as
@@ -58,9 +58,14 @@ Last updated: 2026-09-25. Branch: `claude/kindle-plugin-handoff-wndhwa` of `zaki
   pinned plugins was taller than the screen (Settings cut off); the smoke
   test now checks the fit at every text size.
 
+- **Hold menu on a book (ROADMAP #13):** `ui/bookmenu.lua`, from the Library
+  grid and list and from every book on Home. KOReader's own status row
+  (Reading / On hold / Finished), Reset (labelled "mark as unread"), Remove
+  from Continue Reading (moves `lastfile` to the next history book), Book
+  details, Delete (KOReader's dialog; the cache entry and thumbnail go too).
+
 ## Next, in ranked order (see docs/ROADMAP.md)
 
-- #13 cover hold menu
 - #14 collections
 - #15 multi-select batch actions (delete, and so on)
 - #16 series
@@ -69,7 +74,7 @@ Last updated: 2026-09-25. Branch: `claude/kindle-plugin-handoff-wndhwa` of `zaki
 - #19 send into collection
 - #20 landscape Home
 
-ROADMAP: #9–12 and #21 are marked ✅, #13 is 🔜.
+ROADMAP: #9–13 and #21 are marked ✅, #14 is 🔜.
 
 ## Working notes
 
