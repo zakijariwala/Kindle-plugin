@@ -26,25 +26,28 @@ package.preload["datastorage"] = function()
 end
 
 -- Fake ffi/archiver: zips[path] = { { path, mode, content }, ... }
+-- Like the real one, it only extracts entries already seen by iterate().
 local zips = {}
 package.preload["ffi/archiver"] = function()
     local Reader = {}
     Reader.__index = Reader
     function Reader:new() return setmetatable({}, Reader) end
-    function Reader:open(path) self.z = zips[path] return self.z ~= nil end
+    function Reader:open(path) self.z = zips[path] self.seen = {} return self.z ~= nil end
     function Reader:close() self.z = nil end
     function Reader:iterate()
         local i = 0
         return function()
             i = i + 1
             local e = self.z[i]
-            if e then return { path = e.path, mode = e.mode, size = e.content and #e.content or 0 } end
+            if e then
+                self.seen[e.path] = e
+                return { path = e.path, mode = e.mode, size = e.content and #e.content or 0 }
+            end
         end
     end
-    local function find(z, p) for __, e in ipairs(z) do if e.path == p then return e end end end
-    function Reader:extractToMemory(p) local e = find(self.z, p) return e and e.content end
+    function Reader:extractToMemory(p) local e = self.seen[p] return e and e.content end
     function Reader:extractToPath(p, dest)
-        local e = find(self.z, p)
+        local e = self.seen[p]
         if not e then self.err = "missing" return false end
         local f = io.open(dest, "wb")
         if not f then return false end

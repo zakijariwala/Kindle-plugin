@@ -8,6 +8,10 @@ States:
   received  – "✓ Book received" + Read Now / Done
   failed    – upload rejected or interrupted; session keeps waiting
 
+With `kind = "plugin"` the same screen receives one plugin .zip instead
+("Install plugin from phone"); once it has arrived the screen closes and
+ui/plugininstall.lua takes over (look inside, confirm, install).
+
 The transfer session (and its HTTP server) lives exactly as long as this
 widget: closing the screen, pressing Cancel, suspending the device or
 KOReader exiting always stops the server and clears the token.
@@ -64,11 +68,24 @@ local FAILURES = {
     io = _("The uploaded file could not be added."),
 }
 
+-- Plugin mode: the same failures, worded for a plugin .zip.
+local PLUGIN_FAILURES = {
+    unsupported = _("Only a plugin .zip file can be sent here."),
+    disk_full = _("Not enough storage space to receive this plugin."),
+    corrupt = _("This is not a valid .zip file."),
+    io = _("The plugin could not be received."),
+}
+
 local TransferScreen = FocusManager:extend{
     name = "kindleui_transfer",
     covers_fullscreen = true,
     plugin = nil,
+    kind = "books", -- or "plugin"
 }
+
+function TransferScreen:failureText(reason)
+    return (self.kind == "plugin" and PLUGIN_FAILURES[reason]) or FAILURES[reason] or FAILURES.io
+end
 
 function TransferScreen:init()
     self.dimen = Geom:new{ x = 0, y = 0, w = Screen:getWidth(), h = Screen:getHeight() }
@@ -84,8 +101,9 @@ end
 function TransferScreen:startSession()
     self:stopSession("restart")
     self.books = {} -- { path, title, authors } received in this session
+    self.plugin_zip = nil -- plugin mode: { path, filename } once received
     local provider = Providers.get(Config.get("transfer_method"))
-    local info, err = provider:prepare()
+    local info, err = provider:prepare({ kind = self.kind })
     if not info then
         logger.info("KindleUI transfer: pre-flight failed:", err)
         self:setState("error", { message = ERRORS[err] or ERRORS.server, can_enable_wifi = err == "no_wifi" })
@@ -145,6 +163,11 @@ end
 
 -- One book stored (the phone may send more in the same session).
 function TransferScreen:onBookReceived(path, filename)
+    if self.kind == "plugin" then
+        self.plugin_zip = { path = path, filename = filename }
+        self:setState("waiting")
+        return
+    end
     Books.refreshLibrary(path)
     local book = { path = path, title = filemanagerutil.splitFileNameType(path) }
     table.insert(self.books, book)
@@ -176,12 +199,31 @@ function TransferScreen:onBookReceived(path, filename)
     self:setState("waiting")
 end
 
+-- Plugin mode: the .zip is here; close and let the user review it.
+function TransferScreen:reviewPlugin()
+    local zip = self.plugin_zip
+    UIManager:close(self)
+    UIManager:nextTick(function()
+        require("kindleui/ui/plugininstall").review(zip.path, zip.filename)
+    end)
+end
+
 -- The phone finished its batch: the session has stopped itself.
 function TransferScreen:onFinished()
     self.session = nil
     if self.qr_widget then
         self.qr_widget:free()
         self.qr_widget = nil
+    end
+    if self.kind == "plugin" then
+        if self.plugin_zip then
+            self:reviewPlugin()
+        else
+            self:setState("error", {
+                message = self.state == "failed" and self:failureText(self.data.reason) or _("No plugin was received."),
+            })
+        end
+        return
     end
     self:setState("received", { failure = self.state == "failed" and self.data.reason or nil })
 end
@@ -193,7 +235,9 @@ function TransferScreen:onExpired()
         self.qr_widget:free()
         self.qr_widget = nil
     end
-    if #self.books > 0 then
+    if self.plugin_zip then
+        self:reviewPlugin()
+    elseif #self.books > 0 then
         self:setState("received", {})
     else
         self:setState("error", {
@@ -243,7 +287,8 @@ function TransferScreen:render()
     local function space(n) add(VerticalSpan:new{ width = Screen:scaleBySize(n) }) end
     self.layout = {}
 
-    add(TextWidget:new{ text = _("SEND BOOK"), face = Common.face("title"), max_width = inner_w })
+    local plugin_mode = self.kind == "plugin"
+    add(TextWidget:new{ text = plugin_mode and _("SEND PLUGIN") or _("SEND BOOK"), face = Common.face("title"), max_width = inner_w })
     space(10)
     add(Common.line(inner_w, true))
     space(30)
@@ -258,10 +303,16 @@ function TransferScreen:render()
         })
         space(24)
         if self.state == "failed" then
-            add(text("⚠ " .. (d.filename and (d.filename .. ": ") or "") .. (FAILURES[d.reason] or FAILURES.io),
+            add(text("⚠ " .. (d.filename and (d.filename .. ": ") or "") .. self:failureText(d.reason),
                 Common.face("body"), inner_w))
             space(8)
             add(text(_("You can try again from your phone."), Common.face("small"), inner_w))
+        elseif self.plugin_zip then
+            add(text("✓ " .. _("Plugin received."), Common.face("body"), inner_w))
+        elseif plugin_mode then
+            add(text(_("Scan with your phone, then choose the plugin's .zip file."), Common.face("body"), inner_w))
+            space(6)
+            add(text(_("Nothing is installed until you confirm here."), Common.face("body"), inner_w))
         elseif #self.books > 0 then
             add(text(T(N_("✓ 1 book received so far.", "✓ %1 books received so far.", #self.books), #self.books),
                 Common.face("body"), inner_w))
@@ -285,7 +336,7 @@ function TransferScreen:render()
     elseif self.state == "receiving" then
         local pct = d.total and d.total > 0 and math.floor(d.received * 100 / d.total) or 0
         local head = _("Receiving…")
-        if d.index and d.count and d.count > 1 then
+        if d.index and not plugin_mode and d.count and d.count > 1 then
             head = T(_("Receiving book %1 of %2…"), d.index, d.count)
         end
         add(text(head, Common.face("body"), inner_w))

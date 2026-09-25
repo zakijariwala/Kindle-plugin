@@ -265,6 +265,8 @@ function Installer.install(zip_path, analysis, candidate)
         Updater._purge(staged)
         return nil, "extract"
     end
+    -- The reader can only extract entries it has iterated over once.
+    readEntries(reader)
     local ok_all = true
     for __, item in ipairs(plan) do
         local dest = staged .. "/" .. item.rel

@@ -61,6 +61,13 @@ local steps = {
     { "send book screen", function() plugin():showTransfer() assert(top().name == "kindleui_transfer") end, 3 },
     { "send book new code", function() top():startSession() end, 2 },
     { "close send book", closeTop },
+    { "send plugin screen", function() plugin():showPluginTransfer() assert(top().name == "kindleui_transfer" and top().kind == "plugin") end, 3 },
+    { "close send plugin", closeTop },
+    { "undo with nothing to undo", function()
+        assert(not require("kindleui/util/plugininstaller").canUndo(), "undo offered with no install")
+        require("kindleui/ui/plugininstall").confirmUndo()
+    end },
+    { "close undo message", closeTop },
     { "unpin plugins", function()
         local Plugins = require("kindleui/ui/plugins")
         Plugins.setPinned("calibre", false)

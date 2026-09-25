@@ -212,6 +212,11 @@ function Plugins:buildItems()
     end
     table.sort(rows, function(a, b) return a.text:lower() < b.text:lower() end)
     table.insert(rows, {
+        text = _("Install plugin from phone…"),
+        mandatory = "",
+        install = true,
+    })
+    table.insert(rows, {
         text = _("Manage plugins (KOReader)…"),
         mandatory = "",
         manage = true,
@@ -222,6 +227,9 @@ end
 function Plugins:onMenuChoice(item)
     if item.manage then
         self.plugin:showPluginManagement()
+    elseif item.install then
+        UIManager:close(self)
+        self.plugin:showPluginTransfer()
     elseif item.entry then
         Plugins.open(item.entry)
     end
@@ -264,7 +272,7 @@ end
 function Plugins:paintTo(bb, x, y)
     Menu.paintTo(self, bb, x, y)
     if self.t_open then
-        Perf.log("plugins open (to first paint)", self.t_open, { plugins = #self.item_table - 1 })
+        Perf.log("plugins open (to first paint)", self.t_open, { plugins = #self.item_table - 2 })
         self.t_open = nil
     end
 end

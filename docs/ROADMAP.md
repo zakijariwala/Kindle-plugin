@@ -22,10 +22,10 @@ checked in the KOReader emulator before the next.
 | 6 | Home status line (time · Wi-Fi · battery, no timer) | small | ✅ |
 | 7 | Library search (title / author) | small | ✅ |
 | 8 | Text size for Home, Library, Send Book | small | ✅ |
-| 9 | "Recently added" row on Home | small | 🔜 |
-| 10 | Faster e-ink page turns in the grid | small (tuning needs a device) | |
-| 11 | Prepare all covers now | small (reuses the extractor) | |
-| 12 | Last 2–3 books you're reading on Home | medium | |
+| 9 | "Recently added" row on Home | small | ✅ |
+| 10 | Faster e-ink page turns in the grid | small (tuning needs a device) | ✅ |
+| 11 | Prepare all covers now | small (reuses the extractor) | ✅ |
+| 12 | Last 2–3 books you're reading on Home | medium | 🔜 |
 | 13 | Hold menu on a cover: mark read/unread, remove from Continue Reading, delete, details | medium | |
 | 14 | Collections (KOReader's own) as a Library filter | medium | |
 | 15 | Multi-select and batch actions (Library + Installed Plugins) | medium | |
@@ -34,7 +34,7 @@ checked in the KOReader emulator before the next.
 | 18 | Time left in book (only with the Statistics plugin) | medium | |
 | 19 | Send Book into a collection | medium (after 14) | |
 | 20 | Landscape layout for Home | medium | |
-| 21 | Install plugin from phone | large | |
+| 21 | Install plugin from phone | large | ✅ |
 
 Dropped after a closer look:
 - **Page-flip keys on Home**: Home has a single page, so there is nothing to
@@ -49,7 +49,7 @@ Dropped after a closer look:
 | --- | --- | --- | --- |
 | ✅ | **Pin / favourite plugins on Home** | Hold a plugin in *Installed Plugins* → **Pin to Home** (or Unpin). Pinned plugins appear as a short row of buttons under the main entries (max ~4, so Home stays simple). Tapping one opens that plugin's own menu exactly like *Installed Plugins → Open*. Stored as plugin *names* in the `kindleui` setting; a pinned plugin that has been removed or disabled just doesn't show. | Cheap: a list of names. The plugin's menu is built only when tapped. No change to Home's open time beyond a few buttons. |
 | 🔜 | **Multi-select and batch actions** | **Library:** ☰ → *Select* (or hold a cover → *Select*) puts the grid/list in selection mode. Tap covers to tick them, with *Select all on this page* / *Select all*. A bar at the bottom offers **Delete** (one confirmation showing the count and total size), **Mark as read / unread**, **Add to collection**. Deletion goes through KOReader's own file deletion, so each book's sidecar (progress, highlights) goes with it. The library cache entries and thumbnails are removed too, and Continue Reading/history are updated. **Installed Plugins:** the same selection mode offers **Remove** for user-installed plugins (built-in KOReader plugins can only be *disabled*, never deleted), then one restart. | Cheap: selection is an in-memory set; the work happens once, when confirmed. |
-| 🔜 | **Install plugin from phone** (Settings → Advanced) | Same QR flow as Send Book, but for one `.zip` (e.g. GitHub → Code → Download ZIP). The Kindle finds the `*.koplugin` folder in it (containing `main.lua` + `_meta.lua`), shows its name/description *read as text, not run*, asks for confirmation, then stages → checks it compiles → swaps folders → offers restart. Refuses to overwrite built-in KOReader plugins; keeps the replaced version once for **Undo last plugin install**. Stray files: see below. | Only while that screen is open; one restart per install. |
+| ✅ | **Install plugin from phone** (Settings → Advanced, or Installed Plugins) | Same QR flow as Send Book, but for one `.zip` (e.g. GitHub → Code → Download ZIP). The Kindle finds the `*.koplugin` folder in it (containing `main.lua` + `_meta.lua`), shows its name/description *read as text, not run*, asks for confirmation, then stages → checks it compiles → swaps folders → offers restart. Refuses to overwrite built-in KOReader plugins; keeps the replaced version once for **Undo last plugin install**. Stray files: see below. | Only while that screen is open; one restart per install. |
 | ✅ | **Startup cleanup for the updater** (gap found while designing the plugin installer) | The updater cleans up after itself, but a crash or power loss in the middle of an update can leave `.kindleui.koplugin.new`, `.kindleui.koplugin.old` or `kindleui-update.zip` behind. On the next start, remove them the same way stale `.part` uploads are removed. Special case: if `kindleui.koplugin` itself is missing and `.old` exists, restore it rather than delete it. | A few `stat()` calls once per start. |
 | ✅ | **Check for updates** (Settings → About) | Compare the installed build with the latest commit on `main` of the public repo; download the repo archive, extract only `kindleui.koplugin/`, replace files, ask to restart KOReader. | Network only when the user taps it; nothing automatic. |
 
@@ -60,7 +60,8 @@ tests, screenshots, `.git` folders, macOS `__MACOSX/` junk). None of that is
 ever written into the plugins folder:
 
 1. **The zip itself** streams into a hidden temporary file (like a Send Book
-   upload) and is deleted as soon as the install finishes or fails.
+   upload) in `<settings>/kindleui-incoming/`, and that folder is emptied as
+   soon as the install finishes, fails or is cancelled (and at every start).
 2. **Only the chosen `*.koplugin/` folder is extracted.** Everything outside it
    is never unpacked. Inside it, known junk is skipped: `__MACOSX/`, `._*`,
    `.DS_Store`, `Thumbs.db`, `.git/`. The rest of the folder is the plugin's
@@ -72,13 +73,15 @@ ever written into the plugins folder:
 4. **Replacement swaps whole folders** instead of copying on top. Files that the
    new version no longer has disappear with the old folder, so an update
    never leaves orphaned files from the previous version.
-5. **One backup** (`.<name>.koplugin.old`) is kept for *Undo last plugin
-   install* until the next successful install or until you remove it.
+5. **One backup** (`.<name>.koplugin.undo`) is kept for *Undo last plugin
+   install* until the next successful install (of any plugin) or the Undo.
+   Only the last install can be undone.
 6. **Limits against broken or malicious zips:** at most 50 MB unpacked and
    5 000 files, no paths with `..`, no absolute paths, no symbolic links.
 7. **Crash or power loss mid-install:** the startup cleanup (above) removes
    leftover staging folders and temporary zips, and restores the backup if the
-   plugin folder is missing.
+   plugin folder is missing. `.undo` folders that the Undo record no longer
+   points to are removed at startup too.
 
 ## Home
 
@@ -86,7 +89,7 @@ ever written into the plugins folder:
 | --- | --- | --- | --- |
 | 💡 | **Quick settings bar** (Kindle's swipe-down panel): frontlight, warmth, night mode, Wi-Fi, sleep | Swipe down on Home (or a small ⚙ row) opens a compact panel built from KOReader's own actions (`FrontLightWidget`, `ToggleNightMode`, NetworkMgr). | Cheap; built on demand. |
 | ✅ | **Status line**: battery %, Wi-Fi on/off, time | Read once when Home is shown or refreshed. **No clock timer**, so the time is "as of when Home was drawn". | Cheap: a few sysfs reads per Home open. |
-| 💡 | **Recently added** row (last 3 books received or copied) | Taken from the library cache (sorted by file time). Covers are already cached. | Cheap. |
+| ✅ | **Recently added** row (last 3 books received or copied) | Taken from the library cache (sorted by file time). Covers are already cached. | Cheap. |
 | 💡 | **More than one "currently reading"** (last 2–3 books) | From KOReader's reading history; covers from the cache. | Cheap. |
 | 💡 | **Time left in chapter/book** on the Continue Reading card | Only if KOReader's Statistics plugin is enabled (its data already exists); read one small query when Home opens. | Low, and optional (off if Statistics is disabled). |
 

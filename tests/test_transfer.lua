@@ -292,6 +292,40 @@ do
     os.execute('chmod 755 "' .. ro .. '"')
 end
 
+T.section("plugin mode: one .zip, plugin wording")
+do
+    local inc = T.tmpdir()
+    local zip = makeFile(src, "greeter.koplugin.zip", "PK\3\4" .. string.rep("p", 2048))
+    local not_zip = makeFile(src, "fake.zip", "not a zip at all")
+    local s9, sched9, ev9 = newSession(inc, {
+        kind = "plugin",
+        max_files = 1,
+        is_supported = function(n) return n:lower():match("%.zip$") ~= nil end,
+    })
+    T.ok(s9:start(), "plugin session starts")
+    local b9, p9 = "http://127.0.0.1:" .. s9.port, s9:getPath()
+    local c9, page9 = curl(sched9, b9 .. p9)
+    T.eq(c9, 200, "page served")
+    T.ok(page9:find("SEND PLUGIN", 1, true) and page9:find("Choose plugin .zip", 1, true), "plugin wording")
+    T.ok(not page9:find('type="file" multiple', 1, true), "one file only")
+    local c, msg = curl(sched9, string.format("-X POST --data-binary @%s '%s%s/upload?name=book.epub'", epub, b9, p9))
+    T.eq(c, 415, "a book is refused")
+    T.eq(msg, Session.PLUGIN_MSG.unsupported, "with the plugin message")
+    c, msg = curl(sched9, string.format("-X POST --data-binary @%s '%s%s/upload?name=fake.zip'", not_zip, b9, p9))
+    T.eq(c, 422, "a .zip that is not a zip is refused")
+    T.eq(msg, Session.PLUGIN_MSG.corrupt, "with the plugin message")
+    c = curl(sched9, string.format("-X POST --data-binary @%s '%s%s/upload?name=greeter.koplugin.zip'", zip, b9, p9))
+    T.eq(c, 200, "plugin zip received")
+    T.eq(ev9.received[1], inc .. "/greeter.koplugin.zip", "stored in the incoming folder")
+    c, msg = curl(sched9, string.format("-X POST --data-binary @%s '%s%s/upload?name=again.zip'", zip, b9, p9))
+    T.eq(c, 409, "a second file is refused")
+    T.eq(msg, Session.PLUGIN_MSG.one_only, "one plugin at a time")
+    c, msg = curl(sched9, string.format("-X POST '%s%s/finish'", b9, p9))
+    T.eq(c, 200, "finish")
+    T.eq(msg, Session.PLUGIN_MSG.done, "phone told to confirm on the Kindle")
+    T.eq(ev9.finished[1] and #ev9.finished[1], 1, "one file reported at finish")
+end
+
 T.section("no leftovers")
 local leftovers = 0
 for _, n in ipairs(T.listDir(dest)) do if n:match("%.part$") then leftovers = leftovers + 1 end end

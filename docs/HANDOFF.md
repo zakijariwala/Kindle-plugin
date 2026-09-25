@@ -1,6 +1,6 @@
 # Handoff — state of work
 
-Last updated: 2026-09-25. Branch: `main` of `zakijariwala/Kindle-plugin`.
+Last updated: 2026-09-25. Branch: `claude/kindle-plugin-handoff-wndhwa` of `zakijariwala/Kindle-plugin` (not merged into `main` yet).
 
 ## Done (committed and pushed)
 
@@ -31,47 +31,24 @@ Last updated: 2026-09-25. Branch: `main` of `zakijariwala/Kindle-plugin`.
   - idle expiry;
   - a read-only folder is refused before the upload starts.
 - Self-updater: GitHub → zip → staging → compile check → swap, with its own TLS peer verification.
-- Unit tests: `tests/run.sh`, all passing.
-- Emulator smoke test: `tests/e2e/smoke.sh`, 31 steps, passing.
-- **Plugin installer, part 1/4:** `kindleui/util/pluginzip.lua` (pure zip analysis) plus 31 tests.
-
-## In progress: Install plugin from phone (ROADMAP #21)
-
-`kindleui/util/plugininstaller.lua` is committed as **WIP**. Nothing loads it yet, and it is not tested. It already has:
-
-- `userPluginsDir`, `incomingDir`, `clearIncoming`, `builtins`;
-- `analyze(zip, name)`;
-- `install(zip, analysis, candidate)`: stage `.X.new`, then `loadfile` check, then swap.
-
-To finish:
-
-1. **Fix the replace branch in `install()`.** It currently calls `Updater.swapIn`, which deletes the old version. Replace that call with:
-   1. purge `.X.undo`;
-   2. `os.rename(target, old)`;
-   3. `os.rename(staged, target)`, putting `old` back if this fails;
-   4. `os.rename(old, undo)`.
-2. **Add `Installer.undo()` and `Installer.canUndo()`.**
-   - Record Config `last_plugin_install = {name, had_previous}`.
-   - Undo either restores `.X.undo` or removes the newly added plugin, then asks for a restart.
-   - `Updater.cleanupLeftovers` only handles `.new`/`.old`; keep it away from `.undo`.
-3. **Add a plugin mode to Send Book** (session, server, upload page, `ui/transfer.lua`):
-   - one `.zip`, max 20 MB, saved to `incomingDir()`;
-   - page title "Send plugin", `multiple = false`.
-   - On receive:
-     - run `analyze`;
-     - if there are several candidates, let the user pick one;
-     - refuse built-in plugins;
-     - show a confirm screen with the name, description, "new" or "replaces", a full-access warning and a "disabled" note;
-     - Install, then the restart prompt.
-4. **Entry points:**
-   - Settings → Advanced: "Install plugin from phone" and "Undo last plugin install";
-   - a row in Installed Plugins.
-5. **Startup:** call `Installer.clearIncoming()` in `main.lua`, next to the stale-upload cleanup.
-6. **Tests:**
-   - unit tests where the code is pure;
-   - emulator end-to-end: upload a GitHub-layout zip that contains junk files, install it, restart, check the plugin appears, then test Undo;
-   - extend `tests/e2e/patches/2-kindleui-smoke.lua`.
-7. **Docs:** update README, ARCHITECTURE and ROADMAP.
+- Unit tests: `tests/run.sh`, all passing (including `test_plugininstaller.lua`).
+- Emulator smoke test: `tests/e2e/smoke.sh`, 35 steps, passing.
+- **Install plugin from phone (ROADMAP #21):**
+  - `util/pluginzip.lua` (pure zip analysis) and `util/plugininstaller.lua`
+    (stage → compile check → swap; a replaced version is kept as
+    `.<name>.koplugin.undo`; Undo; startup cleanup);
+  - plugin mode of Send Book (`kind = "plugin"`: one `.zip`, ≤ 20 MB, saved to
+    `<settings>/kindleui-incoming/`, its own phone page wording and messages);
+  - `ui/plugininstall.lua`: pick one plugin when a zip has several, confirm,
+    install, restart prompt; Undo confirm;
+  - entry points: Settings → Advanced ("Install plugin from phone", "Undo last
+    plugin install") and a row at the end of Installed Plugins;
+  - emulator end-to-end: `tests/e2e/plugininstall.sh` (GitHub-style zip with
+    junk → install → restart → loaded; replace → restart; Undo → restart),
+    passing;
+  - a bug the e2e caught: KOReader's `Archiver.Reader` can only extract
+    entries it has already iterated over, so `install()` iterates the zip
+    once first. The unit-test fake now behaves the same way.
 
 ## Next, in ranked order (see docs/ROADMAP.md)
 
@@ -85,7 +62,7 @@ To finish:
 - #19 send into collection
 - #20 landscape Home
 
-Housekeeping: in the ROADMAP table, mark #9 (Recently added), #10 (e-ink refresh) and #11 (Prepare covers) as done.
+ROADMAP housekeeping is done: #9–11 and #21 are marked ✅, #12 is 🔜.
 
 ## Working notes
 
@@ -100,5 +77,7 @@ Housekeeping: in the ROADMAP table, mark #9 (Recently added), #10 (e-ink refresh
 - **KOReader widgets:**
   - `FrameContainer` ignores `width`; use `CenterContainer` to centre;
   - TitleBar needs `subtitle = " "` at creation for `setSubTitle` to work.
-- **Not verified on a real Kindle:** battery and Wi-Fi status, iptables, lipc, e-ink refresh, installer.
+- **Emulator tests that write to the plugins folder** (updater, plugin install)
+  use `KO_PLUGINS_DIR`; the default mount holds only this plugin, read-only.
+- **Not verified on a real Kindle:** battery and Wi-Fi status, iptables, lipc, e-ink refresh, plugin installer.
 - **Repo visibility:** the repo must be public for the updater to work without a token.

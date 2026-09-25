@@ -28,7 +28,7 @@ local TEMPLATE = [[<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<title>Send to Kindle</title>
+<title>{{HTML_TITLE}}</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;padding:24px 20px;font:17px/1.45 -apple-system,system-ui,"Segoe UI",Roboto,sans-serif;color:#111;background:#fff;max-width:520px;margin:0 auto}
@@ -47,36 +47,36 @@ button:disabled{background:#bbb}
 </style>
 </head>
 <body>
-<h1>SEND TO KINDLE</h1>
+<h1>{{TITLE}}</h1>
 <noscript><p>JavaScript is required to upload from this page.</p></noscript>
 <div id="form">
-<label class="pick" for="file">Choose Books</label>
-<input id="file" type="file" multiple>
+<label class="pick" for="file">{{PICK}}</label>
+<input id="file" type="file"{{MULTIPLE}}{{ACCEPT}}>
 <div id="name"></div>
 <button id="send" disabled>Upload</button>
 </div>
 <div class="bar" id="bar"><div id="fill"></div></div>
 <div id="status" role="status" aria-live="polite"></div>
 <ul id="list"></ul>
-<p class="note">Supported: {{FORMATS}}.<br>Maximum size per book: {{MAX_MB}} MB.<br>You can select several books at once. They go directly from this phone to the Kindle over your local Wi-Fi. No internet connection is used.</p>
+<p class="note">{{NOTE}}</p>
 <script>
 (function(){
-var BASE="{{BASE_PATH}}";
+var BASE="{{BASE_PATH}}",L={{STRINGS}};
 var f=document.getElementById("file"),b=document.getElementById("send"),n=document.getElementById("name"),
     s=document.getElementById("status"),bar=document.getElementById("bar"),fill=document.getElementById("fill"),
     form=document.getElementById("form"),list=document.getElementById("list");
 function say(t,cls){s.textContent=t;s.className=cls||"";}
 function item(t,cls){var li=document.createElement("li");li.textContent=t;li.className=cls||"";list.appendChild(li);}
 f.onchange=function(){var k=f.files?f.files.length:0;
-  n.textContent=k===1?f.files[0].name:(k>1?k+" books selected":"");b.disabled=!k;say("");};
+  n.textContent=k===1?f.files[0].name:(k>1?k+L.sel:"");b.disabled=!k;say("");};
 function finish(ok,bad,dead){
   bar.style.display="none";
   if(dead){return;}
   var r=new XMLHttpRequest();r.open("POST",BASE+"/finish",true);r.send("");
   form.style.display="none";
-  if(ok&&!bad){say("\u2713 "+(ok===1?"Book sent successfully.":ok+" books sent successfully.")+" You may close this page.","ok");}
+  if(ok&&!bad){say("\u2713 "+(ok===1?L.one:ok+L.many)+" You may close this page.","ok");}
   else if(ok){say("\u2713 "+ok+" sent, "+bad+" not sent (see below). You may close this page.","ok");}
-  else{say("No books were sent.");}
+  else{say(L.none);}
 }
 b.onclick=function(){
   var files=[],i;for(i=0;i<f.files.length;i++){files.push(f.files[i]);}
@@ -85,7 +85,7 @@ b.onclick=function(){
   var ok=0,bad=0,idx=0;
   function next(){
     if(idx>=files.length){finish(ok,bad,false);return;}
-    var x=files[idx],pos=idx+1,label=(files.length>1?"Book "+pos+" of "+files.length+": ":"")+x.name;idx++;
+    var x=files[idx],pos=idx+1,label=(files.length>1?L.item+pos+" of "+files.length+": ":"")+x.name;idx++;
     fill.style.width="0";say("Uploading "+label+"... 0%");
     var r=new XMLHttpRequest();
     r.open("POST",BASE+"/upload?name="+encodeURIComponent(x.name)+"&index="+pos+"&count="+files.length,true);
@@ -109,17 +109,66 @@ b.onclick=function(){
 </html>
 ]]
 
+-- A JS string literal for our own constant strings (still escaped, so that
+-- nothing can close the string or the <script> element).
+local function jsString(v)
+    return '"' .. tostring(v):gsub('[\\"<>&\n\r]', function(c)
+        return string.format("\\u%04x", c:byte())
+    end) .. '"'
+end
+
+-- What the page says, per kind of upload.
+UploadPage.KINDS = {
+    books = {
+        html_title = "Send to Kindle",
+        title = "SEND TO KINDLE",
+        pick = "Choose Books",
+        multiple = true,
+        note = "Supported: {{FORMATS}}.<br>Maximum size per book: {{MAX_MB}} MB.<br>You can select several books at once. "
+            .. "They go directly from this phone to the Kindle over your local Wi-Fi. No internet connection is used.",
+        strings = { one = "Book sent successfully.", many = " books sent successfully.", none = "No books were sent.",
+            sel = " books selected", item = "Book " },
+    },
+    plugin = {
+        html_title = "Send plugin to Kindle",
+        title = "SEND PLUGIN",
+        pick = "Choose plugin .zip",
+        multiple = false,
+        accept = ".zip,application/zip",
+        note = "Choose the plugin's .zip file (for example a GitHub \"Download ZIP\" or release asset). "
+            .. "Maximum size: {{MAX_MB}} MB.<br>Nothing is installed until you confirm on the Kindle. "
+            .. "It goes directly from this phone to the Kindle over your local Wi-Fi.",
+        strings = { one = "Plugin sent. Confirm the install on your Kindle.", many = " files sent.",
+            none = "No plugin was sent.", sel = " files selected", item = "File " },
+    },
+}
+
 --- Renders the page.
--- @param o { base_path = "/<token>", formats = "EPUB, PDF, ...", max_mb = 500 }
+-- @param o { base_path = "/<token>", formats = "EPUB, PDF, ...", max_mb = 500,
+--            kind = "books" | "plugin" }
 function UploadPage.render(o)
     local path = tostring(o.base_path)
     -- The path is ours (hex token) but never let it break out of the JS string.
     assert(path:match("^/%w+$"), "unexpected base path")
-    local page = TEMPLATE
-        :gsub("{{BASE_PATH}}", function() return path end)
+    local kind = UploadPage.KINDS[o.kind or "books"] or UploadPage.KINDS.books
+    local note = kind.note
         :gsub("{{FORMATS}}", function() return htmlEscape(o.formats or "EPUB, PDF") end)
         :gsub("{{MAX_MB}}", function() return htmlEscape(o.max_mb or 500) end)
-    return page
+    local strings = {}
+    for __, k in ipairs({ "one", "many", "none", "sel", "item" }) do
+        table.insert(strings, k .. ":" .. jsString(kind.strings[k]))
+    end
+    local values = {
+        BASE_PATH = path,
+        HTML_TITLE = htmlEscape(kind.html_title),
+        TITLE = htmlEscape(kind.title),
+        PICK = htmlEscape(kind.pick),
+        MULTIPLE = kind.multiple and " multiple" or "",
+        ACCEPT = kind.accept and (' accept="' .. htmlEscape(kind.accept) .. '"') or "",
+        NOTE = note,
+        STRINGS = "{" .. table.concat(strings, ",") .. "}",
+    }
+    return (TEMPLATE:gsub("{{([%u_]+)}}", function(key) return values[key] end))
 end
 
 return UploadPage
