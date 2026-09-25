@@ -45,7 +45,7 @@ local Library = {
     VIEWS = VIEWS,
     FILTERS = FILTERS,
     -- Remembered for this KOReader session only (not saved to disk).
-    session = { grid_page = 1, list_page = 1 },
+    session = { grid_page = 1, list_page = 1, search = nil },
 }
 
 local function lower(s) return s and s:lower() or "" end
@@ -89,7 +89,7 @@ function Library.loadBooks(plugin)
     end
     table.sort(books, cmp)
     Cache.save()
-    local shown = Library.applyFilter(books, Config.get("library_filter"))
+    local shown = Library.applySearch(Library.applyFilter(books, Config.get("library_filter")), Library.session.search)
     Perf.log("library data", t0, {
         books = stats.books, shown = #shown, scan_ms = scan_ms, meta_ms = meta_ms,
         sidecar_reads = stats.sidecar_reads, new_entries = stats.new_entries,
@@ -114,8 +114,50 @@ function Library.applyFilter(books, filter)
     return out
 end
 
+--- Books whose title or author contains `query` (case-insensitive).
+function Library.applySearch(books, query)
+    if not query or query == "" then return books end
+    local util = require("util")
+    local lc = util.stringLower or string.lower -- UTF-8 aware when available
+    local q = lc(query)
+    local out = {}
+    for __, b in ipairs(books) do
+        if lc(b.title or ""):find(q, 1, true) or lc(b.authors or ""):find(q, 1, true) then
+            table.insert(out, b)
+        end
+    end
+    return out
+end
+
+--- Asks for a search term; empty = clear.
+function Library.askSearch(widget)
+    local InputDialog = require("ui/widget/inputdialog")
+    local dialog
+    local function apply(text)
+        UIManager:close(dialog)
+        Library.session.search = (text and text:match("%S")) and text:gsub("^%s+", ""):gsub("%s+$", "") or nil
+        Library.session.grid_page, Library.session.list_page = 1, 1
+        widget.page = 1
+        widget:reload()
+    end
+    dialog = InputDialog:new{
+        title = _("Search the library"),
+        input = Library.session.search or "",
+        input_hint = _("Title or author"),
+        buttons = {{
+            { text = _("Cancel"), id = "close", callback = function() UIManager:close(dialog) end },
+            { text = _("Search"), is_enter_default = true, callback = function() apply(dialog:getInputText()) end },
+        }},
+    }
+    UIManager:show(dialog)
+    dialog:onShowKeyboard()
+end
+
 --- Title-bar subtitle, e.g. "150 books" or "12 of 150 · Reading".
 function Library.subtitle(shown, total)
+    if Library.session.search then
+        return T(_("“%1”: %2 of %3"), Library.session.search, shown, total)
+    end
     local filter = Config.get("library_filter")
     if filter and filter ~= "all" then
         for __, f in ipairs(FILTERS) do
@@ -129,6 +171,9 @@ end
 
 --- Message for an empty page: no books at all, or none matching the filter.
 function Library.emptyText(total)
+    if Library.session.search and total and total > 0 then
+        return T(_("No books match “%1”.\nClear the search with the ☰ button (top left)."), Library.session.search)
+    end
     if total and total > 0 then
         return _("No books match this filter.\nChange it with the ☰ button (top left).")
     end
@@ -190,6 +235,26 @@ function Library.showOptions(widget, plugin)
         })
     end
     table.insert(buttons, filter_row)
+    local search_row = {{
+        text = Library.session.search and T(_("Search: “%1”…"), Library.session.search) or _("Search…"),
+        callback = function()
+            UIManager:close(dialog)
+            Library.askSearch(widget)
+        end,
+    }}
+    if Library.session.search then
+        table.insert(search_row, {
+            text = _("Clear search"),
+            callback = function()
+                UIManager:close(dialog)
+                Library.session.search = nil
+                Library.session.grid_page, Library.session.list_page = 1, 1
+                widget.page = 1
+                widget:reload()
+            end,
+        })
+    end
+    table.insert(buttons, search_row)
     table.insert(buttons, {})
     for __, s in ipairs(SORTS) do
         table.insert(buttons, {{
