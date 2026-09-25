@@ -96,6 +96,58 @@ local steps = {
         assert(not require("kindleui/util/librarycache").entries[path], "still in the cache")
         for __, t in ipairs(top().tiles) do assert(t.book.path ~= path, "still in the grid") end
     end },
+    { "grid: select mode from the book menu", function()
+        local grid = top()
+        grid:showDetails(grid.tiles[1].book)
+        local menu = top()
+        local sel_btn
+        for __, row in ipairs(menu.buttons) do
+            for __, btn in ipairs(row) do if btn.text and btn.text:find("Select", 1, true) then sel_btn = btn end end
+        end
+        assert(sel_btn, "no Select button in the book menu")
+        sel_btn.callback()
+        assert(grid.selecting and grid.selection.count == 1, "not selecting with one book")
+        grid:onTile(grid.tiles[2].book)
+        assert(grid.selection.count == 2, "tap did not tick a second book")
+        grid:onTile(grid.tiles[2].book)
+        assert(grid.selection.count == 1, "tap did not untick")
+    end },
+    { "grid: selection actions", function()
+        local grid = top()
+        require("kindleui/ui/selection").showActions(grid, plugin())
+        local dialog = top()
+        dialog.buttons[1][1].callback() -- select all on this page
+        assert(grid.selection.count == #grid:pageBooks(), "page not selected")
+    end },
+    { "grid: batch delete two books", function()
+        local grid = top()
+        grid.selection:clear()
+        local victims = {}
+        for i = #grid.books, #grid.books - 1, -1 do
+            table.insert(victims, grid.books[i].path)
+            grid.selection:toggle(grid.books[i].path)
+        end
+        local before = #grid.books
+        require("kindleui/ui/selection").showActions(grid, plugin())
+        local dialog = top()
+        local del
+        for __, row in ipairs(dialog.buttons) do
+            for __, btn in ipairs(row) do if btn.text == require("gettext")("Delete…") then del = btn end end
+        end
+        del.callback()
+        local confirm = top()
+        assert(confirm.ok_callback and confirm.text:find("2 books", 1, true), "confirm: " .. tostring(confirm.text))
+        UIManager:close(confirm)
+        confirm.ok_callback()
+        assert(#grid.books == before - 2, "books: " .. #grid.books .. " (was " .. before .. ")")
+        local lfs = require("libs/libkoreader-lfs")
+        for __, p in ipairs(victims) do assert(not lfs.attributes(p), "still on disk: " .. p) end
+    end },
+    { "grid: leave selection with close", function()
+        local grid = top()
+        grid:onClose()
+        assert(top() == grid and not grid.selecting, "close did not just leave selection")
+    end },
     { "close grid", closeTop },
     { "library list", function() setting("library_view", "list") plugin():showLibrary() assert(top().name == "kindleui_library") end },
     { "list sort by title", function() setting("library_sort", "title") top():reload() end },
@@ -105,6 +157,19 @@ local steps = {
         assert(top().buttons, "no book menu")
     end },
     { "close list book menu", closeTop },
+    { "list: select mode", function()
+        local list = top()
+        list:setSelecting(true)
+        list:onMenuChoice(list.item_table[1])
+        list:onMenuChoice(list.item_table[2])
+        assert(list.selection.count == 2, "list selection: " .. list.selection.count)
+        assert(list.item_table[1].text:find("☑", 1, true), "no tick mark")
+        list:onLeftButtonTap()
+        assert(top().buttons, "no selection actions")
+        closeTop()
+        list:onClose()
+        assert(top() == list and not list.selecting, "close did not just leave selection")
+    end },
     { "close list", function() closeTop() setting("library_view", "covers") setting("library_sort", "recent") end },
     { "installed plugins", function() plugin():showPlugins() assert(top().name == "kindleui_plugins") end },
     { "open a plugin menu", function()

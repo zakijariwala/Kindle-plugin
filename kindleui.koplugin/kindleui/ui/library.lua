@@ -20,6 +20,7 @@ local Config = require("kindleui/config")
 local Device = require("device")
 local Menu = require("ui/widget/menu")
 local Perf = require("kindleui/util/perf")
+local Selection = require("kindleui/ui/selection")
 local UIManager = require("ui/uimanager")
 local ffiUtil = require("ffi/util")
 local _ = require("gettext")
@@ -372,6 +373,15 @@ function Library.showOptions(widget, plugin)
         })
     end
     table.insert(buttons, search_row)
+    if widget.setSelecting then
+        table.insert(buttons, {{
+            text = _("Select books…"),
+            callback = function()
+                UIManager:close(dialog)
+                widget:setSelecting(true)
+            end,
+        }})
+    end
     table.insert(buttons, {})
     for __, s in ipairs(SORTS) do
         table.insert(buttons, {{
@@ -450,13 +460,19 @@ function Library.List:init()
     end
 end
 
-function Library.List:buildItems()
+function Library.List:buildItems(keep_books)
     local items = {}
-    local books, total = Library.loadBooks(self.plugin)
-    self.subtitle = Library.subtitle(#books, total)
+    if not keep_books or not self.books then
+        self.books, self.total_books = Library.loadBooks(self.plugin)
+        if self.selection then self.selection:keepOnly(self.books) end
+    end
+    local books, total = self.books, self.total_books
+    self.subtitle = self.selecting and (self.selection:label() .. " · " .. _("☰ for actions"))
+        or Library.subtitle(#books, total)
     for __, b in ipairs(books) do
+        local mark = self.selecting and (self.selection:has(b.path) and "☑ " or "☐ ") or ""
         table.insert(items, {
-            text = b.authors and (b.title .. " — " .. b.authors) or b.title,
+            text = mark .. (b.authors and (b.title .. " — " .. b.authors) or b.title),
             mandatory = Library.progressText(b),
             file = b.path,
             book_title = b.title,
@@ -484,17 +500,53 @@ function Library.List:reload()
     self:switchItemTable(nil, items, nil, nil, self.subtitle)
 end
 
-function Library.List:onMenuChoice(item)
-    if item.file then
-        UIManager:close(self)
-        self.plugin:openBook(item.file)
+-- Selection mode (same actions as the grid, see ui/selection.lua).
+function Library.List:setSelecting(on, first_path)
+    self.selecting = on and true or nil
+    self.selection = on and Selection.new() or nil
+    if on and first_path then self.selection:toggle(first_path) end
+    self:refreshSelection()
+end
+
+function Library.List:refreshSelection()
+    local items = self:buildItems(true)
+    self:switchItemTable(nil, items, -1, nil, self.subtitle) -- -1: stay on this page
+end
+
+function Library.List:pageBooks()
+    local out = {}
+    local per_page = self.perpage or self.items_per_page
+    local first = ((self.page or 1) - 1) * per_page + 1
+    for i = first, math.min(first + per_page - 1, #self.books) do
+        table.insert(out, self.books[i])
     end
+    return out
+end
+
+function Library.List:onMenuChoice(item)
+    if not item.file then return true end
+    if self.selecting then
+        self.selection:toggle(item.file)
+        self:refreshSelection()
+        return true
+    end
+    UIManager:close(self)
+    self.plugin:openBook(item.file)
     return true
+end
+
+function Library.List:onClose()
+    if self.selecting then -- ✕ / Back first leaves selection mode
+        self:setSelecting(false)
+        return true
+    end
+    return Menu.onClose(self)
 end
 
 -- Hold a book: the book menu (status, reset, delete, details).
 function Library.List:onMenuHold(item)
     if not item.file then return true end
+    if self.selecting then return self:onMenuChoice(item) end
     require("kindleui/ui/bookmenu").show{
         plugin = self.plugin,
         path = item.file,
@@ -502,12 +554,17 @@ function Library.List:onMenuHold(item)
         on_change = function()
             if UIManager:isWidgetShown(self) then self:reload() end
         end,
+        on_select = function() self:setSelecting(true, item.file) end,
     }
     return true
 end
 
 function Library.List:onLeftButtonTap()
-    Library.showOptions(self, self.plugin)
+    if self.selecting then
+        Selection.showActions(self, self.plugin)
+    else
+        Library.showOptions(self, self.plugin)
+    end
 end
 
 function Library.List:onCloseWidget()

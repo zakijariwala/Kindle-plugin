@@ -9,7 +9,8 @@ screen, only while this screen is open*, and swapped in place. Nothing keeps
 running once the Library is closed.
 
 Tap a cover to open the book; hold it for the book menu (ui/bookmenu.lua).
-Swipe left/right (or the arrows) to turn pages.
+Swipe left/right (or the arrows) to turn pages. In selection mode
+(ui/selection.lua) a tap ticks a book instead, and ☰ acts on the selection.
 
 @module kindleui.ui.librarygrid
 ]]
@@ -32,6 +33,7 @@ local ImageWidget = require("ui/widget/imagewidget")
 local InfoMessage = require("ui/widget/infomessage")
 local Library = require("kindleui/ui/library")
 local Perf = require("kindleui/util/perf")
+local Selection = require("kindleui/ui/selection")
 local Size = require("ui/size")
 local TextBoxWidget = require("ui/widget/textboxwidget")
 local TextWidget = require("ui/widget/textwidget")
@@ -88,7 +90,13 @@ function LibraryGrid:computeLayout()
         subtitle = " ", -- a subtitle widget must exist for setSubTitle() to work
         with_bottom_line = true,
         left_icon = "appbar.menu",
-        left_icon_tap_callback = function() Library.showOptions(self, self.plugin) end,
+        left_icon_tap_callback = function()
+            if self.selecting then
+                Selection.showActions(self, self.plugin)
+            else
+                Library.showOptions(self, self.plugin)
+            end
+        end,
         close_callback = function() self:onClose() end,
         show_parent = self,
     }
@@ -132,19 +140,71 @@ function LibraryGrid:tileContent(book)
     else
         cover = self:textCover(book)
     end
+    if self.selecting then
+        -- A thick frame marks selected covers (same size either way).
+        local edge = Size.border.thick * 2
+        local selected = self.selection:has(book.path)
+        cover = FrameContainer:new{
+            bordersize = selected and edge or 0,
+            padding = selected and 0 or edge,
+            margin = 0,
+            cover,
+        }
+    end
     return VerticalGroup:new{
         align = "center",
         CenterContainer:new{ dimen = Geom:new{ w = self.tile_w, h = self.cover_h }, cover },
         CenterContainer:new{
             dimen = Geom:new{ w = self.tile_w, h = self.label_h },
             TextWidget:new{
-                text = Library.progressText(book),
+                text = self:labelText(book),
                 face = self.label_face,
                 max_width = self.tile_w,
-                fgcolor = Blitbuffer.COLOR_DARK_GRAY,
+                bold = self.selecting and self.selection:has(book.path),
+                fgcolor = self.selecting and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_DARK_GRAY,
             },
         },
     }
+end
+
+-- "63%", or "☑ 63%" / "☐ 63%" while selecting.
+function LibraryGrid:labelText(book)
+    local text = Library.progressText(book)
+    if not self.selecting then return text end
+    return (self.selection:has(book.path) and "☑ " or "☐ ") .. text
+end
+
+-- Selection mode --------------------------------------------------------------
+
+function LibraryGrid:setSelecting(on, first_path)
+    self.selecting = on and true or nil
+    self.selection = on and Selection.new() or nil
+    if on and first_path then self.selection:toggle(first_path) end
+    self:buildPage()
+    UIManager:setDirty(self, "ui")
+end
+
+function LibraryGrid:refreshSelection()
+    self:buildPage()
+    UIManager:setDirty(self, "ui")
+end
+
+function LibraryGrid:pageBooks()
+    local out = {}
+    local first = (self.page - 1) * self.per_page + 1
+    for i = first, math.min(first + self.per_page - 1, #self.books) do
+        table.insert(out, self.books[i])
+    end
+    return out
+end
+
+function LibraryGrid:onTile(book)
+    if self.selecting then
+        self.selection:toggle(book.path)
+        self:refreshSelection()
+    else
+        self:openBook(book)
+    end
 end
 
 function LibraryGrid:freeImages()
@@ -179,8 +239,10 @@ function LibraryGrid:buildPage()
             if not book then break end
             if c > 1 then table.insert(row, HorizontalSpan:new{ width = self.gap }) end
             local tile = Common.Tappable:new{
-                callback = function() self:openBook(book) end,
-                hold_callback = function() self:showDetails(book) end,
+                callback = function() self:onTile(book) end,
+                hold_callback = function()
+                    if self.selecting then self:onTile(book) else self:showDetails(book) end
+                end,
                 self:tileContent(book),
             }
             tile.book = book
@@ -244,7 +306,9 @@ function LibraryGrid:buildPage()
             },
         },
     }
-    self.title_bar:setSubTitle(Library.subtitle(#self.books, self.total_books))
+    self.title_bar:setSubTitle(self.selecting
+        and (self.selection:label() .. " · " .. _("☰ for actions"))
+        or Library.subtitle(#self.books, self.total_books))
     self:moveFocusTo(1, 1, FocusManager.FOCUS_ONLY_ON_NT)
     -- Start after this page has been painted.
     UIManager:nextTick(function()
@@ -346,11 +410,13 @@ function LibraryGrid:showDetails(book)
         on_change = function()
             if UIManager:isWidgetShown(self) then self:reload() end
         end,
+        on_select = function() self:setSelecting(true, book.path) end,
     }
 end
 
 function LibraryGrid:reload()
     self.books, self.total_books, self.all_books = Library.loadBooks(self.plugin)
+    if self.selection then self.selection:keepOnly(self.books) end
     self.page = math.min(self.page, self:pageCount())
     self:buildPage()
     UIManager:setDirty(self, "partial")
@@ -398,6 +464,10 @@ function LibraryGrid:onShow()
 end
 
 function LibraryGrid:onClose()
+    if self.selecting then -- ✕ / Back first leaves selection mode
+        self:setSelecting(false)
+        return true
+    end
     UIManager:close(self)
     return true
 end

@@ -5,6 +5,7 @@ The menu shown when a book is held (Library cover or list row, Home):
     Reset (mark as unread)…             KOReader's own Reset (it confirms)
     Collections…                        KOReader's own collection chooser (add/remove)
     Remove from Continue Reading        only if the book is in the history
+    Select…                             selection mode, this book ticked (Library)
     Book details
     Delete book…                        KOReader's own delete (it confirms and
                                         also removes the sidecar, history and
@@ -93,6 +94,15 @@ function BookMenu.show(o)
                 close()
                 BookMenu.removeFromHistory(o.path)
                 changed()
+            end,
+        }})
+    end
+    if o.on_select then
+        table.insert(buttons, {{
+            text = _("Select… (several books)"),
+            callback = function()
+                close()
+                o.on_select()
             end,
         }})
     end
