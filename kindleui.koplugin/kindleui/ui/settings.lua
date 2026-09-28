@@ -5,9 +5,11 @@ Simplified Settings.
       Reading       – a few common reading options (KOReader's own items)
       Library       – sort order, Home screen at startup, refresh
       Device        – frontlight, sleep screen, rotation (KOReader's own items)
-      Connectivity  – Send Book, Wi-Fi (KOReader's own)
+      Connectivity  – the Kindle's Wi-Fi settings (airplane mode, networks,
+                      saved networks, details: ui/connectivity.lua), Send Book,
+                      KOReader's Network menu
       Advanced      – Open KOReader Settings / all menus, plugin management,
-                      install a plugin from the phone (and undo it)
+                      undo the last plugin install, exit to the Kindle home
       About
 
 Wherever possible the entries *are* KOReader's menu entries, taken from the
@@ -146,16 +148,22 @@ function Settings.build(plugin)
     addIf(device, ko("screen_rotation"))
 
     -- Connectivity ----------------------------------------------------------
-    local connectivity = {
-        {
-            text = _("Send Book"),
-            callback = function(touchmenu_instance)
-                if touchmenu_instance then touchmenu_instance:closeMenu() end
-                plugin:showTransfer()
-            end,
-        },
-    }
-    addIf(connectivity, ko("network"))
+    local connectivity = require("kindleui/ui/connectivity").items()
+    table.insert(connectivity, {
+        text = _("Send Book"),
+        callback = function(touchmenu_instance)
+            if touchmenu_instance then touchmenu_instance:closeMenu() end
+            plugin:showTransfer()
+        end,
+    })
+    local ko_network = ko("network")
+    if ko_network then
+        -- KOReader's own Network menu, under a clearer name
+        local more = {}
+        for k, v in pairs(ko_network) do more[k] = v end
+        more.text, more.text_func = _("More network settings (KOReader)"), nil
+        table.insert(connectivity, more)
+    end
 
     -- Advanced ----------------------------------------------------------------
     local advanced = {
@@ -194,6 +202,13 @@ function Settings.build(plugin)
         callback = function(touchmenu_instance)
             if touchmenu_instance then touchmenu_instance:closeMenu() end
             require("kindleui/ui/plugininstall").confirmUndo()
+        end,
+    })
+    table.insert(advanced, {
+        text = plugin.exitLabel(),
+        callback = function(touchmenu_instance)
+            if touchmenu_instance then touchmenu_instance:closeMenu() end
+            plugin:confirmExit()
         end,
     })
 

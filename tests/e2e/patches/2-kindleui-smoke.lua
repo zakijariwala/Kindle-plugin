@@ -329,7 +329,7 @@ local steps = {
             local all = {}
             for __, r in ipairs(full.buttons) do for __, btn in ipairs(r) do table.insert(all, btn.text) end end
             logger.info("KINDLEUI SMOKE quick settings (full): " .. table.concat(all, " | "))
-            assert(#all == 5, "expected 5 entries, got " .. #all)
+            assert(#all == 6, "expected 6 entries (with Exit), got " .. #all)
             UIManager:close(full)
         end)
         Device.hasFrontlight, Device.hasWifiToggle, Device.canSuspend = saved[1], saved[2], saved[3]
@@ -340,6 +340,63 @@ local steps = {
     { "text size medium", function() setting("text_size", "medium") plugin():showHome() homeFits() end },
     { "settings menu", function() plugin():showSettings() end },
     { "close settings", closeTop },
+    -- Connectivity: only entries that read state are opened here (switching
+    -- airplane mode or Wi-Fi would cut a device test's own connection).
+    { "settings: connectivity entries", function()
+        local root = require("kindleui/ui/settings").build(plugin())
+        local conn
+        for __, e in ipairs(root) do if e.text == "Connectivity" then conn = e.sub_item_table end end
+        assert(conn, "no Connectivity section")
+        local names = {}
+        for __, e in ipairs(conn) do table.insert(names, e.text or (e.text_func and e.text_func()) or "?") end
+        logger.info("KINDLEUI SMOKE connectivity: " .. table.concat(names, " | "))
+        local want = { "Wi-Fi", "Wi-Fi networks…", "Network details", "Send Book" }
+        if require("kindleui/util/kindlewifi").available() then
+            for __, n in ipairs({ "Airplane mode", "Join other network…", "Saved networks" }) do table.insert(want, n) end
+        end
+        for __, n in ipairs(want) do
+            local found
+            for __, have in ipairs(names) do if have == n then found = true end end
+            assert(found, "missing: " .. n)
+        end
+    end },
+    { "connectivity: network details", function()
+        require("kindleui/ui/connectivity").showDetails()
+        local msg = top()
+        assert(msg.text and msg.text ~= "", "no details text")
+        logger.info("KINDLEUI SMOKE network details: " .. msg.text:gsub("\n", " | "):gsub("%d+%.%d+%.%d+%.%d+", "<ip>"):gsub("%x%x:%x%x:%x%x:%x%x:%x%x:%x%x", "<mac>"))
+    end },
+    { "close details", closeTop },
+    { "connectivity: saved networks", function()
+        if not require("kindleui/util/kindlewifi").available() then return end
+        local items = require("kindleui/ui/connectivity").savedItems()
+        assert(#items >= 1, "no rows")
+        logger.info("KINDLEUI SMOKE saved networks: " .. #items)
+    end },
+    { "exit: Home row and confirm box (not confirmed)", function()
+        plugin():showHome()
+        local home = top()
+        local label = plugin().exitLabel()
+        local btn
+        for __, row in ipairs(home.layout) do
+            if row[1] and row[1].text == label then btn = row[1] end
+        end
+        assert(btn, "no " .. label .. " row on Home")
+        homeFits()
+        btn.callback()
+        local box = top()
+        assert(box.ok_text == "Exit" and box.ok_callback, "no exit confirmation")
+    end },
+    { "cancel exit", closeTop },
+    { "exit: in quick settings", function()
+        local panel = require("kindleui/ui/quicksettings").show(plugin())
+        local found
+        for __, row in ipairs(panel.buttons) do
+            for __, b in ipairs(row) do if b.text == plugin().exitLabel() then found = true end end
+        end
+        assert(found, "no exit button in quick settings")
+    end },
+    { "close quick settings", closeTop },
     { "send book screen", function() plugin():showTransfer() assert(top().name == "kindleui_transfer") end, 3 },
     { "send book new code", function() top():startSession() end, 2 },
     { "send plugin button", function()
