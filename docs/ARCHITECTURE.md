@@ -110,11 +110,11 @@ Home ─ Continue Reading ─→ FileManager:openFile ─→ reader
                                                  ─ hold ─→ book menu (status, reset, remove from
                                                             Continue Reading, details, delete)
                                                  ─ ☰ ─→ view, sort, refresh, "Browse all files (KOReader)"
-     ─ + Send Book ──────→ TransferScreen
+     ─ + Send Book ──────→ TransferScreen ─ Send Plugin / Send Book ─→ same screen, other kind
      ─ Installed Plugins ─→ list ─ tap ─→ that plugin's own menu (TouchMenu)
      ─ Settings ─────────→ Reading / Library / Device / Connectivity / Advanced / About
                                                          └ Advanced → Open KOReader Settings,
-                                                           Install plugin from phone, Undo last plugin install
+                                                           Undo last plugin install
 reader ─ top menu file-browser icon, Home key, "File browser" gesture ─→ FileManager → Home
 Home ─ Back key ─→ KOReader file browser (☰ → Kindle-style Home brings it back)
 ```
@@ -266,14 +266,16 @@ bundle, and plain HTTP.
 
 ## Install plugin from phone
 
-The Send Book screen with `kind = "plugin"` (Settings → Advanced, or the row
-at the end of Installed Plugins). Same session, token, server and expiry as
+The Send Book screen with `kind = "plugin"`, reached with the **Send Plugin**
+button beside Cancel on Send Book (`TransferScreen:switchKind`, which starts a
+new session; **Send Book** switches back). Same session, token, server and expiry as
 Send Book; only these differ:
 
 ```
-session: kind "plugin", max_files 1, only *.zip (zip magic checked), ≤ 20 MB,
+session: kind "plugin", max_files 1, only *.zip (zip magic checked), ≤ 60 MB,
          stored in <settings>/kindleui-incoming/ (not the library)
-phone page: "SEND PLUGIN", one file, plugin wording
+phone page: "SEND PLUGIN", one file, plugin wording, no `accept` filter
+            (phone pickers greyed out downloaded zips; the Kindle checks instead)
 phone POSTs /finish → screen closes → ui/plugininstall.lua:
   Installer.analyze: list entries, find <name>.koplugin folder(s) (any depth,
     also GitHub's "<name>.koplugin-main"), read fullname/description from

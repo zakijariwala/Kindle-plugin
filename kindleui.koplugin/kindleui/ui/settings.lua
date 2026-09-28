@@ -185,14 +185,6 @@ function Settings.build(plugin)
     }
     addIf(advanced, ko("plugin_management"))
     table.insert(advanced, {
-        text = _("Install plugin from phone"),
-        help_text = _("Send a KOReader plugin (.zip) from your phone over local Wi-Fi, the same way as Send Book. You confirm before anything is installed."),
-        callback = function(touchmenu_instance)
-            if touchmenu_instance then touchmenu_instance:closeMenu() end
-            plugin:showPluginTransfer()
-        end,
-    })
-    table.insert(advanced, {
         text_func = function()
             local record = require("kindleui/util/plugininstaller").lastInstall()
             return record and T(_("Undo last plugin install (%1)"), record.name) or _("Undo last plugin install")

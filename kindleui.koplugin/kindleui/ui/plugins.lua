@@ -293,11 +293,6 @@ function Plugins:buildItems()
     end
     table.sort(rows, function(a, b) return a.text:lower() < b.text:lower() end)
     table.insert(rows, {
-        text = _("Install plugin from phone…"),
-        mandatory = "",
-        install = true,
-    })
-    table.insert(rows, {
         text = _("Manage plugins (KOReader)…"),
         mandatory = "",
         manage = true,
@@ -352,9 +347,6 @@ function Plugins:onMenuChoice(item)
     end
     if item.manage then
         self.plugin:showPluginManagement()
-    elseif item.install then
-        UIManager:close(self)
-        self.plugin:showPluginTransfer()
     elseif item.entry then
         Plugins.open(item.entry)
     end

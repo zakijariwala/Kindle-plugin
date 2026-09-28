@@ -216,7 +216,8 @@ function KindleUI:showTransfer()
     UIManager:show(TransferScreen:new{ plugin = self })
 end
 
---- "Install plugin from phone": the Send Book screen, receiving one plugin .zip.
+--- The Send Book screen already in plugin mode (receives one plugin .zip).
+-- Users reach it through the "Send Plugin" button on Send Book.
 function KindleUI:showPluginTransfer()
     local TransferScreen = require("kindleui/ui/transfer")
     UIManager:show(TransferScreen:new{ plugin = self, kind = "plugin" })

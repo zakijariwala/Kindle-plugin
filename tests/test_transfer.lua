@@ -332,6 +332,8 @@ do
     T.ok(page9:find("SEND PLUGIN", 1, true) and page9:find("Choose plugin .zip", 1, true), "plugin wording")
     T.ok(not page9:find('type="file" multiple', 1, true), "one file only")
     T.ok(not page9:find('id="coll"', 1, true), "no collection picker for plugins")
+    -- A MIME filter hides downloaded zips in phone pickers (seen on a real device).
+    T.ok(not page9:find("accept=", 1, true), "no accept filter on the file picker")
     local c, msg = curl(sched9, string.format("-X POST --data-binary @%s '%s%s/upload?name=book.epub'", epub, b9, p9))
     T.eq(c, 415, "a book is refused")
     T.eq(msg, Session.PLUGIN_MSG.unsupported, "with the plugin message")

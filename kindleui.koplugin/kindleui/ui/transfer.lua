@@ -8,9 +8,10 @@ States:
   received  – "✓ Book received" + Read Now / Done
   failed    – upload rejected or interrupted; session keeps waiting
 
-With `kind = "plugin"` the same screen receives one plugin .zip instead
-("Install plugin from phone"); once it has arrived the screen closes and
-ui/plugininstall.lua takes over (look inside, confirm, install).
+With `kind = "plugin"` the same screen receives one plugin .zip instead;
+the "Send Plugin" / "Send Book" button next to Cancel switches between the
+two. Once a plugin has arrived the screen closes and ui/plugininstall.lua
+takes over (look inside, confirm, install).
 
 The transfer session (and its HTTP server) lives exactly as long as this
 widget: closing the screen, pressing Cancel, suspending the device or
@@ -34,6 +35,8 @@ local Device = require("device")
 local FocusManager = require("ui/widget/focusmanager")
 local FrameContainer = require("ui/widget/container/framecontainer")
 local Geom = require("ui/geometry")
+local HorizontalGroup = require("ui/widget/horizontalgroup")
+local HorizontalSpan = require("ui/widget/horizontalspan")
 local Providers = require("kindleui/transfer/provider")
 local QR = require("kindleui/transfer/qr")
 local Size = require("ui/size")
@@ -148,6 +151,13 @@ function TransferScreen:startSession()
     end
     self.qr_widget = qr_widget
     self:setState("waiting")
+end
+
+--- Switches between receiving books and receiving a plugin: a new session
+-- (new token, new QR code), since the phone page differs.
+function TransferScreen:switchKind(kind)
+    self.kind = kind
+    self:startSession()
 end
 
 function TransferScreen:stopSession(reason)
@@ -275,7 +285,7 @@ local function text(str, face, width, align)
     }
 end
 
-function TransferScreen:_button(label, callback, width)
+function TransferScreen:_button(label, callback, width, row)
     local btn = Button:new{
         text = label,
         callback = callback,
@@ -286,8 +296,24 @@ function TransferScreen:_button(label, callback, width)
         padding_v = Screen:scaleBySize(12),
         show_parent = self,
     }
-    table.insert(self.layout, { btn })
+    if row then
+        table.insert(row, btn)
+    else
+        table.insert(self.layout, { btn })
+    end
     return btn
+end
+
+-- Two buttons side by side (one focus row), each `width` wide.
+function TransferScreen:_buttonPair(a, b, width)
+    local focus_row = {}
+    table.insert(self.layout, focus_row)
+    return HorizontalGroup:new{
+        align = "center",
+        self:_button(a[1], a[2], width, focus_row),
+        HorizontalSpan:new{ width = Screen:scaleBySize(16) },
+        self:_button(b[1], b[2], width, focus_row),
+    }
 end
 
 function TransferScreen:render()
@@ -344,7 +370,15 @@ function TransferScreen:render()
         add(text(_("Your phone must be the hotspot the Kindle is connected to (or on the same Wi-Fi)."),
             Common.face("small"), inner_w))
         space(28)
-        add(self:_button(#self.books > 0 and _("Done") or _("Cancel"), function() self:onClose() end, btn_w))
+        local close = { #self.books > 0 and _("Done") or _("Cancel"), function() self:onClose() end }
+        if #self.books > 0 or self.plugin_zip then
+            add(self:_button(close[1], close[2], btn_w))
+        else
+            -- Nothing received yet: offer the other kind of transfer.
+            local other = plugin_mode and "books" or "plugin"
+            local switch = { plugin_mode and _("Send Book") or _("Send Plugin"), function() self:switchKind(other) end }
+            add(self:_buttonPair(switch, close, math.floor((inner_w - Screen:scaleBySize(16)) / 2)))
+        end
     elseif self.state == "receiving" then
         local pct = d.total and d.total > 0 and math.floor(d.received * 100 / d.total) or 0
         local head = _("Receiving…")

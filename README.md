@@ -121,10 +121,10 @@ code/URL could upload a book during the session; keep the hotspot private.
 
 ## Installing other plugins from the phone
 
-**Settings → Advanced → Install plugin from phone** (or the row of that name at the end of
-**Installed Plugins**) shows the same kind of QR code as Send Book. On the
+Open **+ Send Book** and tap **Send Plugin** (next to Cancel): the screen
+switches to plugin mode with a new QR code (**Send Book** switches back). On the
 phone, choose a plugin's `.zip`, for example GitHub → Code → **Download ZIP**,
-or a release asset (up to 20 MB). The Kindle finds the `*.koplugin` folder
+or a release asset (up to 60 MB). The Kindle finds the `*.koplugin` folder
 inside it and shows its name and description, and whether it is new or
 replaces an installed version. Nothing is installed until you tap
 **Install** / **Replace**; then restart KOReader.

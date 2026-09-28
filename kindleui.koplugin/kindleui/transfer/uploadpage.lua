@@ -136,7 +136,11 @@ UploadPage.KINDS = {
         title = "SEND PLUGIN",
         pick = "Choose plugin .zip",
         multiple = false,
-        accept = ".zip,application/zip",
+        -- No `accept` filter: phone pickers match it against MIME types, and a
+        -- downloaded .zip is often application/x-zip-compressed or
+        -- application/octet-stream, so the file showed greyed out and could
+        -- not be chosen (seen on a Paperwhite: the page loaded, no upload
+        -- ever arrived). The Kindle checks the name and contents instead.
         note = "Choose the plugin's .zip file (for example a GitHub \"Download ZIP\" or release asset). "
             .. "Maximum size: {{MAX_MB}} MB.<br>Nothing is installed until you confirm on the Kindle. "
             .. "It goes directly from this phone to the Kindle over your local Wi-Fi.",

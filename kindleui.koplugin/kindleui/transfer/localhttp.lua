@@ -17,7 +17,9 @@ local logger = require("logger")
 
 local LocalHttp = {
     id = "local_http",
-    PLUGIN_MAX_BYTES = 20 * 1024 * 1024,
+    -- A GitHub "Download ZIP" often carries data beside the plugin (only the
+    -- plugin folder is unpacked, with its own limits in util/pluginzip.lua).
+    PLUGIN_MAX_BYTES = 60 * 1024 * 1024,
 }
 
 local function isZipName(name)
