@@ -67,7 +67,8 @@ drives the plugin through its own functions:
   since the emulator runs KOReader as a desktop) the full five-entry panel;
 - Settings;
 - Send Book, including New Code;
-- Send Plugin, and Undo with nothing to undo;
+- the **Send Plugin** button on Send Book (switches to plugin mode with a new
+  session) and **Send Book** back, and Undo with nothing to undo;
 - rotating the screen and back: Home follows (size, portrait or two-column
   landscape layout) and still fits.
 
@@ -139,7 +140,64 @@ Not covered by the emulator: the real GitHub endpoints (the repository was
 private at the time; the requests are identical apart from the host), Kindle `iptables`, `lipc` sleep timer, real Wi-Fi
 hotspot, e-ink refresh behaviour, non-touch Kindles, real device speed.
 
-## 3. Manual test procedure (device)
+## 3. The same tests on a Kindle (`tools/kindle.sh`)
+
+Over KOReader's own SSH server, from this computer. One-time setup:
+
+1. `tools/kindle.sh setup-key` creates `~/.ssh/kindle_ed25519`. Copy the
+   `.pub` file to the Kindle over USB as
+   `koreader/settings/SSH/authorized_keys` (newer Kindles are MTP devices: use
+   Explorer/Finder or Android File Transfer; there is no drive letter).
+2. Kindle and computer on the same Wi-Fi (or the computer joins the phone's
+   hotspot too). In KOReader: **Tools → More tools → SSH server → Start**
+   (port 2222). The server keeps running across KOReader restarts.
+3. `echo <Kindle IP> > .kindle-host` (KOReader: Network → Network info).
+4. `tools/kindle.sh setup` installs two test-only KOReader patches from
+   `tests/device/` into `koreader/patches`; restart KOReader **once from its
+   menu**. `tools/kindle.sh teardown` removes them.
+   - `2-kindleui-devctl.lua` takes one command at a time from
+     `/tmp/kindleui-devctl.cmd` (restart, open Send Book / Send Plugin and log
+     the session URL, close, confirm, …).
+   - `1-kindleui-sandbox.lua` switches KOReader's data folder when
+     `/tmp/kindleui-sandbox` exists (see smoke below).
+
+Restarts are always KOReader's own (exit code 85, `UIManager:restartKOReader`).
+Killing KOReader and launching `koreader.sh` again hands the screen back to
+the Kindle framework and takes it again seconds later; on a Paperwhite (FW
+5.19.5) that rebooted the device twice, so the tool never does it.
+
+```sh
+tools/kindle.sh deploy    # copy this checkout's plugin to the Kindle (whole-folder swap)
+tools/kindle.sh restart   # KOReader's own restart; waits until Home is back
+tools/kindle.sh unit      # tests/test_*.lua under the Kindle's own LuaJIT, LuaSocket, curl
+tools/kindle.sh smoke     # the emulator smoke patch, on the device (see below)
+tools/kindle.sh send      # real Wi-Fi transfer: this computer plays the phone
+tools/kindle.sh all       # deploy + restart + unit + smoke + send
+tools/kindle.sh log 200   # tail of crash.log
+```
+
+- **unit** copies the plugin and `tests/` to `/mnt/us/kindleui-devtest` and
+  runs them with `koreader/luajit` (plus a byte-compile of every plugin file,
+  and the QR check with KOReader's own encoder), then deletes the copy.
+- **smoke** never touches your books or settings: it builds the synthetic
+  library (60 books) locally and copies it to `/mnt/us/kindleui-devtest/books`,
+  writes the folder of a scratch profile to `/tmp/kindleui-sandbox`, and
+  restarts KOReader, which then uses `/mnt/us/kindleui-devtest/home` for its
+  settings, history, collections and statistics. The smoke patch is copied
+  into `koreader/patches` with a first line that makes it do nothing outside
+  the scratch profile. Afterwards the patch and the switch are removed,
+  KOReader restarts into the real profile and the folder is deleted. A
+  reboot (which clears `/tmp`) also always comes back to the real profile.
+  Pass/fail rules are those of `tests/e2e/smoke.sh`. The patch holds the
+  Kindle's own sleep timer off for the run (it only sees real touches).
+- **send** uploads an EPUB and a PDF over the real Wi-Fi with curl, then
+  presses **Send Plugin**, checks the plugin page, uploads a plugin zip and
+  checks that the Kindle asks to install it (closed without installing).
+  The default test books are removed from the library again afterwards.
+  A real plugin: `SKIP_BOOKS=1 PLUGIN_ZIP=x.zip INSTALL=1 PLUGIN_NAME=name
+  tools/kindle.sh send` also taps Install, restarts and checks that it loads.
+
+## 4. Manual test procedure (device)
 
 Setup: install the plugin, restart KOReader, keep `crash.log` open (all plugin
 lines start with `KindleUI`). Put 100+ books in the documents folder and open

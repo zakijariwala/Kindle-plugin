@@ -37,7 +37,7 @@ Last updated: 2026-09-25. Branch: `claude/kindle-plugin-handoff-wndhwa` of `zaki
   - `util/pluginzip.lua` (pure zip analysis) and `util/plugininstaller.lua`
     (stage → compile check → swap; a replaced version is kept as
     `.<name>.koplugin.undo`; Undo; startup cleanup);
-  - plugin mode of Send Book (`kind = "plugin"`: one `.zip`, ≤ 20 MB, saved to
+  - plugin mode of Send Book (`kind = "plugin"`: one `.zip`, ≤ 60 MB, saved to
     `<settings>/kindleui-incoming/`, its own phone page wording and messages);
   - `ui/plugininstall.lua`: pick one plugin when a zip has several, confirm,
     install, restart prompt; Undo confirm;
@@ -103,6 +103,33 @@ Last updated: 2026-09-25. Branch: `claude/kindle-plugin-handoff-wndhwa` of `zaki
   KOReader's file browser when it re-lays out). Library, Installed Plugins
   and Send Book do not re-lay out if rotated while open (they are usually
   closed when rotating from Settings); they are right the next time they open.
+
+- **Send Plugin on the Send Book screen (2026-09-28):** plugin transfer is no
+  longer a separate menu entry (removed from Settings → Advanced and from the
+  end of Installed Plugins). Send Book has **Send Plugin** beside Cancel
+  (`TransferScreen:switchKind`, new session); plugin mode shows **Send Book**
+  to go back. Undo last plugin install stays in Settings → Advanced.
+- **Plugin transfer fix, found on a real Paperwhite:** the phone loaded the
+  plugin page but no upload ever reached the Kindle (log: "phone connected",
+  then nothing), while Send Book worked (9 PDFs in one session). The page's
+  `accept=".zip,application/zip"` made phone pickers grey out downloaded zips
+  (MIME `application/x-zip-compressed` / `octet-stream`). Removed; the Kindle
+  already checks the name and zip magic. Regression check in test_transfer.
+- **Device test runner:** `tools/kindle.sh` (docs/TESTING.md section 3) runs
+  the unit tests, the smoke patch (in a scratch profile) and a real Wi-Fi send
+  on the Kindle over KOReader's SSH server, with test-only patches from
+  `tests/device/`. On the user's Paperwhite (FW 5.19.5, KOReader v2026.07.2):
+  unit 937/937 pass; send (books + Send Plugin button + zip) passes; RONkindle
+  (`duas`, 27.6 MB GitHub zip) installed via Send Plugin and loads.
+  Never kill/relaunch KOReader there: it rebooted the Kindle twice; use
+  KOReader's own restart (devctl patch).
+- **Plugin upload cap 20 → 60 MB** (user's choice): GitHub "Download ZIP"s
+  with data beside the plugin (RONkindle: 27.6 MB) were refused.
+
+## Queued (user request, 2026-09-28)
+
+- Port the Kindle's own Wi-Fi & connectivity settings into the plugin.
+- An Exit button that leaves KOReader straight to the stock Kindle home.
 
 ## Next
 

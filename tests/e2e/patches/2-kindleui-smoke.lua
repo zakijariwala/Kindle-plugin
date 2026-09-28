@@ -39,6 +39,11 @@ local steps = {
     { "grid search", function() require("kindleui/ui/library").session.search = "book" top():reload() end },
     { "grid clear search + filter", function() require("kindleui/ui/library").session.search = nil setting("library_filter", "all") top():reload() end },
     { "grid prepare all covers", function() top():prepareAll() end, 12 },
+    -- slower on a device: wait for the job and its "Covers ready" message
+    { "grid covers ready", function()
+        local w = top()
+        assert(w.name == "kindleui_library_grid" and not w.preparing, "still preparing")
+    end, 1.5, retry = 60 },
     { "grid options dialog", function() require("kindleui/ui/library").showOptions(top(), plugin()) end },
     { "close options", closeTop },
     { "grid: collection filter", function()
@@ -141,10 +146,13 @@ local steps = {
         local grid = top()
         grid.selection:clear()
         local victims = {}
-        for i = #grid.books, #grid.books - 1, -1 do
-            table.insert(victims, grid.books[i].path)
-            grid.selection:toggle(grid.books[i].path)
+        -- By name: on a device every copied book can have the same time, so
+        -- "the last two" in date order could be the books read later on.
+        for __, b in ipairs(grid.books) do
+            if b.path:find("Book 05[89]") then table.insert(victims, b.path) end
         end
+        if #victims < 2 then victims = { grid.books[#grid.books].path, grid.books[#grid.books - 1].path } end
+        for __, p in ipairs(victims) do grid.selection:toggle(p) end
         local before = #grid.books
         require("kindleui/ui/selection").showActions(grid, plugin())
         local dialog = top()
@@ -200,8 +208,10 @@ local steps = {
     { "plugins: selection offers no built-in plugin", function()
         local list = top()
         list:setSelecting(true)
+        -- (a real device may also have user plugins, which may be selected)
+        local builtins = require("kindleui/util/plugininstaller").builtins()
         for __, row in ipairs(list.item_table) do
-            assert(not row.select_module, "selectable: " .. tostring(row.text))
+            assert(not (row.select_module and builtins[row.select_module.name]), "selectable: " .. tostring(row.text))
         end
         list:onClose()
         assert(top() == list and not list.selecting, "close did not just leave selection")
@@ -332,9 +342,20 @@ local steps = {
     { "close settings", closeTop },
     { "send book screen", function() plugin():showTransfer() assert(top().name == "kindleui_transfer") end, 3 },
     { "send book new code", function() top():startSession() end, 2 },
+    { "send plugin button", function()
+        local w = top()
+        local label = w.layout[#w.layout][1].text
+        assert(label == "Send Plugin", "first button of the last row is " .. tostring(label))
+        w.layout[#w.layout][1].callback()
+        assert(top() == w and w.kind == "plugin" and w.session, "did not switch to plugin mode")
+    end, 3 },
+    { "send book button", function()
+        local w = top()
+        assert(w.layout[#w.layout][1].text == "Send Book", "no Send Book button in plugin mode")
+        w.layout[#w.layout][1].callback()
+        assert(w.kind == "books" and w.session, "did not switch back to books")
+    end, 3 },
     { "close send book", closeTop },
-    { "send plugin screen", function() plugin():showPluginTransfer() assert(top().name == "kindleui_transfer" and top().kind == "plugin") end, 3 },
-    { "close send plugin", closeTop },
     { "undo with nothing to undo", function()
         assert(not require("kindleui/util/plugininstaller").canUndo(), "undo offered with no install")
         require("kindleui/ui/plugininstall").confirmUndo()
@@ -370,15 +391,31 @@ local steps = {
     end },
 }
 
+-- On a real Kindle the system sleep timer only sees real touches: hold it
+-- off for the whole run (Send Book's own guard is released by its steps).
+local function holdKindleSleep(on)
+    if require("device"):isKindle() then
+        os.execute("lipc-set-prop com.lab126.powerd preventScreenSaver " .. (on and 1 or 0))
+    end
+end
 local i = 0
 local function nextStep()
     i = i + 1
     local step = steps[i]
+    if i == 1 then holdKindleSleep(true) end
     if not step then
+        holdKindleSleep(false)
         logger.info("KINDLEUI SMOKE DONE failures=" .. failures)
         return
     end
     local ok, err = pcall(step[2])
+    if not ok and step.retry and (step.tries or 0) < step.retry then
+        -- a condition that is not true yet: look again later (same step)
+        step.tries = (step.tries or 0) + 1
+        i = i - 1
+        UIManager:scheduleIn(2, nextStep)
+        return
+    end
     if ok then
         logger.info("KINDLEUI SMOKE ok " .. step[1])
     else
