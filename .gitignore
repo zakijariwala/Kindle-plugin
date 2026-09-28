@@ -1,3 +1,4 @@
 tests/books/
 node_modules/
 dist/
+.kindle-host

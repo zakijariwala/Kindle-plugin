@@ -37,7 +37,7 @@ Last updated: 2026-09-25. Branch: `claude/kindle-plugin-handoff-wndhwa` of `zaki
   - `util/pluginzip.lua` (pure zip analysis) and `util/plugininstaller.lua`
     (stage → compile check → swap; a replaced version is kept as
     `.<name>.koplugin.undo`; Undo; startup cleanup);
-  - plugin mode of Send Book (`kind = "plugin"`: one `.zip`, ≤ 20 MB, saved to
+  - plugin mode of Send Book (`kind = "plugin"`: one `.zip`, ≤ 60 MB, saved to
     `<settings>/kindleui-incoming/`, its own phone page wording and messages);
   - `ui/plugininstall.lua`: pick one plugin when a zip has several, confirm,
     install, restart prompt; Undo confirm;
@@ -104,6 +104,46 @@ Last updated: 2026-09-25. Branch: `claude/kindle-plugin-handoff-wndhwa` of `zaki
   and Send Book do not re-lay out if rotated while open (they are usually
   closed when rotating from Settings); they are right the next time they open.
 
+- **Send Plugin on the Send Book screen (2026-09-28):** plugin transfer is no
+  longer a separate menu entry (removed from Settings → Advanced and from the
+  end of Installed Plugins). Send Book has **Send Plugin** beside Cancel
+  (`TransferScreen:switchKind`, new session); plugin mode shows **Send Book**
+  to go back. Undo last plugin install stays in Settings → Advanced.
+- **Plugin transfer fix, found on a real Paperwhite:** the phone loaded the
+  plugin page but no upload ever reached the Kindle (log: "phone connected",
+  then nothing), while Send Book worked (9 PDFs in one session). The page's
+  `accept=".zip,application/zip"` made phone pickers grey out downloaded zips
+  (MIME `application/x-zip-compressed` / `octet-stream`). Removed; the Kindle
+  already checks the name and zip magic. Regression check in test_transfer.
+- **Device test runner:** `tools/kindle.sh` (docs/TESTING.md section 3) runs
+  the unit tests, the smoke patch (in a scratch profile) and a real Wi-Fi send
+  on the Kindle over KOReader's SSH server, with test-only patches from
+  `tests/device/`. On the user's Paperwhite (FW 5.19.5, KOReader v2026.07.2):
+  unit 937/937 pass; send (books + Send Plugin button + zip) passes; RONkindle
+  (`duas`, 27.6 MB GitHub zip) installed via Send Plugin and loads.
+  After #22/#23: unit 985/985, smoke 67 steps, 0 failures.
+  Never kill/relaunch KOReader there: it rebooted the Kindle twice; use
+  KOReader's own restart (devctl patch).
+- **Plugin upload cap 20 → 60 MB** (user's choice): GitHub "Download ZIP"s
+  with data beside the plugin (RONkindle: 27.6 MB) were refused.
+
+- **Wi-Fi & connectivity (ROADMAP #22, user request 2026-09-28):**
+  `util/kindlewifi.lua` (lipc: airplane mode via `com.lab126.cmd
+  wirelessEnable`, saved networks from `wifid profileData` without the psk,
+  `currentEssid`, `deleteProfile`, the `711` diagnostics text parsed) and
+  `ui/connectivity.lua` (Settings → Connectivity). Joining goes through
+  KOReader's NetworkMgr (saveNetwork/authenticateNetwork) and its
+  NetworkSetting list. Tested: `test_kindlewifi.lua` (46), smoke on the
+  Paperwhite (entries, details, saved list), airplane on/off live on the
+  device (radio down, then reconnected by itself in < 25 s).
+  Not tested by script: Join other, Forget (would change the owner's saved
+  networks), the network list's connect flow (KOReader's own widget).
+- **Exit to Kindle Home (ROADMAP #23):** last nav row on Home (it can push
+  "Recently added" off Home at large text: the fit rules drop it first), in
+  quick settings and Settings → Advanced; confirm → `Event "Exit"`.
+  Smoke checks the row, the confirm box and quick settings; the exit itself
+  needs a person watching the Kindle.
+
 ## Next
 
 The ranked list (#1–21) is done and no 💡 ideas are left in
@@ -127,5 +167,6 @@ ROADMAP: #1–21 are all marked ✅.
   - TitleBar needs `subtitle = " "` at creation for `setSubTitle` to work.
 - **Emulator tests that write to the plugins folder** (updater, plugin install)
   use `KO_PLUGINS_DIR`; the default mount holds only this plugin, read-only.
-- **Not verified on a real Kindle:** battery and Wi-Fi status, iptables, lipc, e-ink refresh, plugin installer, quick settings (light, Wi-Fi, sleep).
+- **Verified on a Kindle Paperwhite (FW 5.19.5):** iptables, lipc sleep hold, plugin installer, Send Book/Plugin over real Wi-Fi, every screen (smoke), timings (docs/PERFORMANCE.md). **Not yet:** tapping quick settings' light/Wi-Fi/sleep, e-ink refresh by eye, a phone picking a zip after the `accept` fix, a side-by-side with the stock home screen.
+- **Performance lead from real use:** the folder scan of a real `documents` (FUSE, Amazon files next to books) is 230–580 ms and dominates My Library opens; synthetic libraries hide it.
 - **Repo visibility:** the repo must be public for the updater to work without a token.

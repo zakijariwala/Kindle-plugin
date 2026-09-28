@@ -216,7 +216,8 @@ function KindleUI:showTransfer()
     UIManager:show(TransferScreen:new{ plugin = self })
 end
 
---- "Install plugin from phone": the Send Book screen, receiving one plugin .zip.
+--- The Send Book screen already in plugin mode (receives one plugin .zip).
+-- Users reach it through the "Send Plugin" button on Send Book.
 function KindleUI:showPluginTransfer()
     local TransferScreen = require("kindleui/ui/transfer")
     UIManager:show(TransferScreen:new{ plugin = self, kind = "plugin" })
@@ -229,6 +230,29 @@ function KindleUI:openBook(file, after_open_callback)
 end
 
 --- Reveals KOReader's own file browser (the shell steps aside).
+--- Label of the Exit entry: on a Kindle, KOReader closing shows the Kindle's
+-- own home screen.
+function KindleUI.exitLabel()
+    return require("device"):isKindle() and _("Exit to Kindle Home") or _("Exit KOReader")
+end
+
+--- Asks, then closes KOReader the way its own menu's Exit does. On a Kindle
+-- the launcher then gives the screen back to the Kindle's home screen.
+function KindleUI:confirmExit()
+    local ConfirmBox = require("ui/widget/confirmbox")
+    local Event = require("ui/event")
+    UIManager:show(ConfirmBox:new{
+        text = require("device"):isKindle()
+            and _("Close KOReader and go back to the Kindle's home screen?\n\nStart KOReader again the way you usually do (for example from KUAL).")
+            or _("Close KOReader?"),
+        ok_text = _("Exit"),
+        ok_callback = function()
+            logger.info("KindleUI: exit requested from the Home screen")
+            UIManager:broadcastEvent(Event:new("Exit"))
+        end,
+    })
+end
+
 function KindleUI:showFileBrowser()
     if self:isFileManager() then
         self:closeHome()

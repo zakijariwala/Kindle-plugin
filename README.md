@@ -11,9 +11,11 @@ Home
  │                       search, KOReader collections; hold a book: status,
  │                       reset, collections, remove, details, delete)
  ├── + Send Book        (phone → Kindle over the phone's hotspot, via QR code;
- │                       several books at once)
+ │                       several books at once; Send Plugin for a plugin .zip)
  ├── Installed Plugins  (every KOReader plugin, with its own menu)
- └── Settings           (Reading · Library · Device · Connectivity · Advanced · About)
+ ├── Settings           (Reading · Library · Device · Connectivity · Advanced · About;
+ │                       Connectivity has the Kindle's own Wi-Fi settings)
+ └── Exit to Kindle Home (closes KOReader; the Kindle's own home screen returns)
 ```
 
 KOReader is not replaced, forked or patched. It still does all the reading,
@@ -27,11 +29,11 @@ the Kindle joins it, the Kindle shows a QR code, the phone's browser opens it
 and uploads the file straight to the Kindle over the local link. No cloud, no
 account and no phone app are involved.
 
-> **Status: MVP, tested in a KOReader emulator, not yet on Kindle hardware.**
-> Every screen and the complete phone → Kindle transfer were run inside a real
-> KOReader build (v2026.07.1, Linux, at Paperwhite 12 resolution), with
-> headless Chromium playing the phone. The Kindle-only parts (firewall rule,
-> Kindle sleep timer) and real device speed still need a device. See
+> **Status: MVP, tested on a Kindle Paperwhite** (firmware 5.19.5, KOReader
+> v2026.07.2) and in a KOReader emulator. On the Kindle: all unit tests, the
+> scripted walk through every screen, a real Wi-Fi Send Book / Send Plugin,
+> installing a third-party plugin from its GitHub zip, and three days of
+> normal use (Home opens in ~84 ms, a Library page turns in ~62 ms). See
 > [Compatibility](#compatibility) and [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 
 ## Installation
@@ -119,12 +121,42 @@ Plain HTTP on a local link is used (there is no way to get a trusted TLS
 certificate for a hotspot IP). Anyone on the same hotspot who can see the QR
 code/URL could upload a book during the session; keep the hotspot private.
 
+## Wi-Fi and connectivity
+
+**Settings → Connectivity** holds what the Kindle's own *Settings → Wi-Fi &
+Bluetooth* screen offers, so there is no need to leave KOReader for it:
+
+- **Airplane mode**: the Kindle's own switch (all radios off; turning it
+  off reconnects to a saved network by itself).
+- **Wi-Fi**: on/off (KOReader's toggle).
+- **Wi-Fi networks…**: networks in range; tap one to join it (KOReader's
+  network list, with the password prompt).
+- **Join other network…**: a network that does not show its name.
+- **Saved networks**: the networks this Kindle remembers; **Connect** to one or
+  **Forget** it (its password is deleted from the Kindle).
+- **Network details**: network name, signal, security, channel, IP address,
+  subnet mask, router, DNS, MAC address, Wi-Fi region.
+- **Send Book**, and **More network settings (KOReader)** for everything else.
+
+Networks joined here are stored in the Kindle's own list, so the Kindle's
+home screen knows them too. On other devices, the Kindle-only entries
+(airplane mode, join other, saved networks) are left out.
+
+Bluetooth (audio devices on the Kindle) is not included: KOReader does not use it.
+
+## Leaving KOReader
+
+**Exit to Kindle Home** (the last row on Home; also in quick settings and
+Settings → Advanced) asks once, then closes KOReader exactly like its own
+menu's *Exit*. On a Kindle the Kindle's own home screen comes back. Start
+KOReader again the usual way (KUAL, or its entry in the Kindle library).
+
 ## Installing other plugins from the phone
 
-**Settings → Advanced → Install plugin from phone** (or the row of that name at the end of
-**Installed Plugins**) shows the same kind of QR code as Send Book. On the
+Open **+ Send Book** and tap **Send Plugin** (next to Cancel): the screen
+switches to plugin mode with a new QR code (**Send Book** switches back). On the
 phone, choose a plugin's `.zip`, for example GitHub → Code → **Download ZIP**,
-or a release asset (up to 20 MB). The Kindle finds the `*.koplugin` folder
+or a release asset (up to 60 MB). The Kindle finds the `*.koplugin` folder
 inside it and shows its name and description, and whether it is new or
 replaces an installed version. Nothing is installed until you tap
 **Install** / **Replace**; then restart KOReader.
@@ -170,6 +202,19 @@ build. Every KOReader API it uses is listed, with its source location, in
 [docs/KOREADER_APIS.md](docs/KOREADER_APIS.md).
 
 **What has been tested:**
+- **On a Kindle Paperwhite** (FW 5.19.5, KOReader v2026.07.2, 1272×1696),
+  with `tools/kindle.sh` over KOReader's SSH server
+  ([docs/TESTING.md](docs/TESTING.md), section 3):
+  - the automated tests below, under the Kindle's own LuaJIT (939 checks);
+  - the emulator's scripted walk through every screen (59 steps, 0 failures),
+    in a scratch profile;
+  - Send Book and Send Plugin over real Wi-Fi, including the Kindle firewall
+    rule and the sleep hold (no failure in three days of logs);
+  - installing a third-party plugin (RONkindle, a 27.6 MB GitHub "Download
+    ZIP") through Send Plugin, and KOReader loading it;
+  - three days of normal use with a 163–496-book library, and a phone
+    sending 9 PDFs (66 MB) in one session.
+  Timings and memory: [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 - The transfer layer (HTTP server, sessions, several books per session, idle
   expiry, tokens, upload validation, filename sanitising, stale temp cleanup,
   IP selection): automated tests under LuaJIT 2.1 + LuaSocket, with curl as
@@ -184,14 +229,14 @@ build. Every KOReader API it uses is listed, with its source location, in
 - Timings and memory in that emulator: [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 
 **What has not been tested:**
-- Any Kindle, Kobo or other e-reader (so, no real device timings yet).
-- The Kindle-only commands: `iptables` (firewall) and `lipc-set-prop`
-  (sleep timer). They mirror KOReader's own SSH and Keep alive plugins, and
-  their result is logged.
-- Real phone browsers (iOS Safari, Android Chrome) over a real hotspot.
+- Other Kindle models, Kobo or other e-readers.
+- A phone picking a plugin `.zip` since the file-type filter was removed
+  (the same upload was tested from a computer on the same Wi-Fi); iOS Safari
+  and Android Chrome by name.
 - Non-touch Kindles (key navigation is implemented but untested).
-- Installing a plugin on a real Kindle (the user plugins folder there is
-  `koreader/plugins`, next to the built-in ones).
+- The quick settings' light, Wi-Fi and sleep entries were shown on the Kindle
+  but not tapped by the scripted run; e-ink refresh is only checked by eye.
+- A side-by-side timing against the stock Kindle home screen.
 
 **Assumptions / known limitations:**
 - Needs a KOReader recent enough to have `UIManager:insertZMQ`,

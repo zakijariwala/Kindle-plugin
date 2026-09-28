@@ -279,6 +279,7 @@ function Home:_build(fit)
         { _("+ Send Book"), function() self.plugin:showTransfer() end },
         { _("Installed Plugins"), function() self.plugin:showPlugins() end },
         { _("Settings"), function() self.plugin:showSettings() end },
+        { self.plugin.exitLabel(), function() self.plugin:confirmExit() end },
     }
     radd(Common.line(right_w))
     for __, entry in ipairs(nav) do

@@ -10,6 +10,7 @@ to the file manager's listeners, so the behaviour is KOReader's:
     Night mode       ToggleNightMode
     Wi-Fi on / off   ToggleWifi
     Sleep            RequestSuspend
+    Exit             the Home screen's Exit (confirm, then KOReader's Exit)
 
 Entries the device does not support are left out. Nothing runs until a
 button is tapped.
@@ -73,12 +74,23 @@ function QuickSettings.show(plugin, on_change)
         })
     end
     table.insert(buttons, row)
+    local last = {}
     if Device:canSuspend() then
-        table.insert(buttons, {{
+        table.insert(last, {
             text = _("Sleep"),
             callback = function() send("RequestSuspend") end,
-        }})
+        })
     end
+    if plugin and plugin.confirmExit then
+        table.insert(last, {
+            text = plugin.exitLabel(),
+            callback = function()
+                UIManager:close(dialog)
+                plugin:confirmExit()
+            end,
+        })
+    end
+    if #last > 0 then table.insert(buttons, last) end
     dialog = ButtonDialog:new{
         title = _("Quick settings"),
         title_align = "center",

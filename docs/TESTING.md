@@ -1,14 +1,15 @@
 # Testing
 
-Three layers:
+Four layers:
 
 1. **Automated tests** (LuaJIT, no KOReader): transfer layer, security, QR.
 2. **Emulator**: the plugin running inside a real KOReader build (v2026.07.1,
    Linux/SDL at Paperwhite 12 geometry), driven by scripts. It covers the UI,
    the end-to-end phone upload, timings and memory.
-3. **Device** (manual): what an emulator cannot show. That means the Kindle
-   firewall, the Kindle sleep timer, a real phone hotspot, e-ink refresh, and
-   real device timings.
+3. **On a Kindle, scripted** (`tools/kindle.sh`): layers 1 and 2 again on the
+   device, plus a real Wi-Fi transfer and a timing run.
+4. **On a Kindle, by hand**: what a script cannot judge, like e-ink refresh
+   and a real phone's browser.
 
 ## 1. Automated tests
 
@@ -65,9 +66,13 @@ drives the plugin through its own functions:
 - quick settings: night mode toggled on and off through the panel, the panel
   opened by a swipe, and (with the device's light/Wi-Fi/sleep flags forced on,
   since the emulator runs KOReader as a desktop) the full five-entry panel;
-- Settings;
+- Settings; Connectivity's entries (Airplane mode, Join other network and
+  Saved networks only on a Kindle), Network details, the saved-network list;
+- Exit: the Home row (Home still fits), its confirm box (cancelled), and the
+  quick settings entry;
 - Send Book, including New Code;
-- Send Plugin, and Undo with nothing to undo;
+- the **Send Plugin** button on Send Book (switches to plugin mode with a new
+  session) and **Send Book** back, and Undo with nothing to undo;
 - rotating the screen and back: Home follows (size, portrait or two-column
   landscape layout) and still fits.
 
@@ -139,7 +144,92 @@ Not covered by the emulator: the real GitHub endpoints (the repository was
 private at the time; the requests are identical apart from the host), Kindle `iptables`, `lipc` sleep timer, real Wi-Fi
 hotspot, e-ink refresh behaviour, non-touch Kindles, real device speed.
 
-## 3. Manual test procedure (device)
+## 3. The same tests on a Kindle (`tools/kindle.sh`)
+
+Over KOReader's own SSH server, from this computer. One-time setup:
+
+1. `tools/kindle.sh setup-key` creates `~/.ssh/kindle_ed25519`. Copy the
+   `.pub` file to the Kindle over USB as
+   `koreader/settings/SSH/authorized_keys` (newer Kindles are MTP devices: use
+   Explorer/Finder or Android File Transfer; there is no drive letter).
+2. Kindle and computer on the same Wi-Fi (or the computer joins the phone's
+   hotspot too). In KOReader: **Tools → More tools → SSH server → Start**
+   (port 2222). The server keeps running across KOReader restarts.
+3. `echo <Kindle IP> > .kindle-host` (KOReader: Network → Network info).
+4. `tools/kindle.sh setup` installs two test-only KOReader patches from
+   `tests/device/` into `koreader/patches`; restart KOReader **once from its
+   menu**. `tools/kindle.sh teardown` removes them.
+   - `2-kindleui-devctl.lua` takes one command at a time from
+     `/tmp/kindleui-devctl.cmd` (restart, open Send Book / Send Plugin and log
+     the session URL, close, confirm, …).
+   - `1-kindleui-sandbox.lua` switches KOReader's data folder when
+     `/tmp/kindleui-sandbox` exists (see smoke below).
+
+Restarts are always KOReader's own (exit code 85, `UIManager:restartKOReader`).
+Killing KOReader and launching `koreader.sh` again hands the screen back to
+the Kindle framework and takes it again seconds later; on a Paperwhite (FW
+5.19.5) that rebooted the device twice, so the tool never does it.
+
+```sh
+tools/kindle.sh deploy    # copy this checkout's plugin to the Kindle (whole-folder swap)
+tools/kindle.sh restart   # KOReader's own restart; waits until Home is back
+tools/kindle.sh unit      # tests/test_*.lua under the Kindle's own LuaJIT, LuaSocket, curl
+tools/kindle.sh smoke     # the emulator smoke patch, on the device (see below)
+tools/kindle.sh send      # real Wi-Fi transfer: this computer plays the phone
+tools/kindle.sh bench     # tests/bench/run.sh's timing run (150 books), on the device
+tools/kindle.sh all       # deploy + restart + unit + smoke + send
+tools/kindle.sh log 200   # tail of crash.log
+```
+
+- **unit** copies the plugin and `tests/` to `/mnt/us/kindleui-devtest` and
+  runs them with `koreader/luajit` (plus a byte-compile of every plugin file,
+  and the QR check with KOReader's own encoder), then deletes the copy.
+- **smoke** never touches your books or settings: it builds the synthetic
+  library (60 books) locally and copies it to `/mnt/us/kindleui-devtest/books`,
+  writes the folder of a scratch profile to `/tmp/kindleui-sandbox`, and
+  restarts KOReader, which then uses `/mnt/us/kindleui-devtest/home` for its
+  settings, history, collections and statistics. The smoke patch is copied
+  into `koreader/patches` with a first line that makes it do nothing outside
+  the scratch profile. Afterwards the patch and the switch are removed,
+  KOReader restarts into the real profile and the folder is deleted. A
+  reboot (which clears `/tmp`) also always comes back to the real profile.
+  Pass/fail rules are those of `tests/e2e/smoke.sh`. The patch holds the
+  Kindle's own sleep timer off for the run (it only sees real touches).
+- **send** uploads an EPUB and a PDF over the real Wi-Fi with curl, then
+  presses **Send Plugin**, checks the plugin page, uploads a plugin zip and
+  checks that the Kindle asks to install it (closed without installing).
+  The default test books are removed from the library again afterwards.
+  A real plugin: `SKIP_BOOKS=1 PLUGIN_ZIP=x.zip INSTALL=1 PLUGIN_NAME=name
+  tools/kindle.sh send` also taps Install, restarts and checks that it loads.
+
+### Results on a Kindle Paperwhite (28 Sep 2026)
+
+Firmware 5.19.5, KOReader v2026.07.2, 1272×1696, reached over an iPhone
+hotspot.
+
+| Run | Result |
+| --- | --- |
+| `unit` | 985 checks passed, 0 failed (KOReader's QR encoder included) |
+| `smoke` (60 books, scratch profile) | 67 steps, 0 failures, no Lua errors (Connectivity and Exit included) |
+| Airplane mode on/off (devctl, from a script on the Kindle) | on: `wirelessEnable=0`, Wi-Fi down; off: reconnected to the saved network by itself within 25 s |
+| `send` | EPUB + PDF received; Send Plugin button → plugin page without `accept`; zip received; install prompt shown |
+| `send` with RONkindle's GitHub zip, `INSTALL=1` | 27.6 MB in 7 s; installed as `duas.koplugin` (new); loaded after the restart |
+| `bench` ×2 (150 books) | see [PERFORMANCE.md](PERFORMANCE.md) |
+
+What the first device runs found (all fixed):
+- Plugin uploads from a phone never started (the page's `accept` filter).
+- The smoke patch assumed an emulator: the Kindle's own sleep timer fired
+  mid-run (only real touches reset it), "Prepare all covers" took longer
+  than a fixed wait, books copied in one go share a timestamp (so "the last
+  two" in date order were the wrong books), and a real device has
+  user-installed plugins.
+- Killing KOReader and relaunching it rebooted the Kindle twice; the tool now
+  only uses KOReader's own restart.
+- A redirected data folder needs KOReader's subfolders created first, or
+  KOReader stops at start (the sandbox patch creates them, and is one-shot so
+  such a failure can never repeat).
+
+## 4. Manual test procedure (device)
 
 Setup: install the plugin, restart KOReader, keep `crash.log` open (all plugin
 lines start with `KindleUI`). Put 100+ books in the documents folder and open
@@ -201,6 +291,18 @@ Read the `KindleUI perf:` lines in `crash.log`:
 | Cover extraction, 9 books | `covers extracted (child process)` |
 | Installed Plugins open | `plugins open (to first paint)` |
 | Memory | `lua_heap=` / `rss=` on each line; check `rss` after browsing every Library page |
+
+### Connectivity and Exit
+
+| # | Step | Expected |
+| --- | --- | --- |
+| C1 | Settings → Connectivity | Airplane mode, Wi-Fi, Wi-Fi networks…, Join other network…, Saved networks, Network details, Send Book, More network settings (KOReader) |
+| C2 | Airplane mode on, then off | Wi-Fi goes off; after turning it off the Kindle rejoins a saved network by itself |
+| C3 | Wi-Fi networks… → a network → password | Joins; it then appears under Saved networks, and on the Kindle's own Wi-Fi list |
+| C4 | Join other network… (a hidden network) | Joins |
+| C5 | Saved networks → one → Forget | Gone from the list, and from the Kindle's own list |
+| C6 | Network details | Name, signal, security, channel, IP, mask, router, DNS, MAC, region |
+| E1 | Home → Exit to Kindle Home → Exit | KOReader closes; the Kindle's own home screen appears |
 
 ### Updates
 
