@@ -35,6 +35,8 @@ checked in the KOReader emulator before the next.
 | 19 | Send Book into a collection | medium (after 14) | ✅ |
 | 20 | Landscape layout for Home | medium | ✅ |
 | 21 | Install plugin from phone | large | ✅ |
+| 22 | The Kindle's Wi-Fi & connectivity settings in Settings → Connectivity | medium | ✅ |
+| 23 | Exit to Kindle Home (Home, quick settings, Settings → Advanced) | small | ✅ |
 
 Dropped after a closer look:
 - **Page-flip keys on Home**: Home has a single page, so there is nothing to

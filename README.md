@@ -11,9 +11,11 @@ Home
  │                       search, KOReader collections; hold a book: status,
  │                       reset, collections, remove, details, delete)
  ├── + Send Book        (phone → Kindle over the phone's hotspot, via QR code;
- │                       several books at once)
+ │                       several books at once; Send Plugin for a plugin .zip)
  ├── Installed Plugins  (every KOReader plugin, with its own menu)
- └── Settings           (Reading · Library · Device · Connectivity · Advanced · About)
+ ├── Settings           (Reading · Library · Device · Connectivity · Advanced · About;
+ │                       Connectivity has the Kindle's own Wi-Fi settings)
+ └── Exit to Kindle Home (closes KOReader; the Kindle's own home screen returns)
 ```
 
 KOReader is not replaced, forked or patched. It still does all the reading,
@@ -118,6 +120,36 @@ The phone and Kindle can also simply be on the same home/office Wi-Fi.
 Plain HTTP on a local link is used (there is no way to get a trusted TLS
 certificate for a hotspot IP). Anyone on the same hotspot who can see the QR
 code/URL could upload a book during the session; keep the hotspot private.
+
+## Wi-Fi and connectivity
+
+**Settings → Connectivity** holds what the Kindle's own *Settings → Wi-Fi &
+Bluetooth* screen offers, so there is no need to leave KOReader for it:
+
+- **Airplane mode**: the Kindle's own switch (all radios off; turning it
+  off reconnects to a saved network by itself).
+- **Wi-Fi**: on/off (KOReader's toggle).
+- **Wi-Fi networks…**: networks in range; tap one to join it (KOReader's
+  network list, with the password prompt).
+- **Join other network…**: a network that does not show its name.
+- **Saved networks**: the networks this Kindle remembers; **Connect** to one or
+  **Forget** it (its password is deleted from the Kindle).
+- **Network details**: network name, signal, security, channel, IP address,
+  subnet mask, router, DNS, MAC address, Wi-Fi region.
+- **Send Book**, and **More network settings (KOReader)** for everything else.
+
+Networks joined here are stored in the Kindle's own list, so the Kindle's
+home screen knows them too. On other devices, the Kindle-only entries
+(airplane mode, join other, saved networks) are left out.
+
+Bluetooth (audio devices on the Kindle) is not included: KOReader does not use it.
+
+## Leaving KOReader
+
+**Exit to Kindle Home** (the last row on Home; also in quick settings and
+Settings → Advanced) asks once, then closes KOReader exactly like its own
+menu's *Exit*. On a Kindle the Kindle's own home screen comes back. Start
+KOReader again the usual way (KUAL, or its entry in the Kindle library).
 
 ## Installing other plugins from the phone
 

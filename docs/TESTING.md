@@ -66,7 +66,10 @@ drives the plugin through its own functions:
 - quick settings: night mode toggled on and off through the panel, the panel
   opened by a swipe, and (with the device's light/Wi-Fi/sleep flags forced on,
   since the emulator runs KOReader as a desktop) the full five-entry panel;
-- Settings;
+- Settings; Connectivity's entries (Airplane mode, Join other network and
+  Saved networks only on a Kindle), Network details, the saved-network list;
+- Exit: the Home row (Home still fits), its confirm box (cancelled), and the
+  quick settings entry;
 - Send Book, including New Code;
 - the **Send Plugin** button on Send Book (switches to plugin mode with a new
   session) and **Send Book** back, and Undo with nothing to undo;
@@ -206,8 +209,9 @@ hotspot.
 
 | Run | Result |
 | --- | --- |
-| `unit` | 939 checks passed, 0 failed (KOReader's QR encoder included) |
-| `smoke` (60 books, scratch profile) | 59 steps, 0 failures, no Lua errors |
+| `unit` | 985 checks passed, 0 failed (KOReader's QR encoder included) |
+| `smoke` (60 books, scratch profile) | 67 steps, 0 failures, no Lua errors (Connectivity and Exit included) |
+| Airplane mode on/off (devctl, from a script on the Kindle) | on: `wirelessEnable=0`, Wi-Fi down; off: reconnected to the saved network by itself within 25 s |
 | `send` | EPUB + PDF received; Send Plugin button → plugin page without `accept`; zip received; install prompt shown |
 | `send` with RONkindle's GitHub zip, `INSTALL=1` | 27.6 MB in 7 s; installed as `duas.koplugin` (new); loaded after the restart |
 | `bench` ×2 (150 books) | see [PERFORMANCE.md](PERFORMANCE.md) |
@@ -287,6 +291,18 @@ Read the `KindleUI perf:` lines in `crash.log`:
 | Cover extraction, 9 books | `covers extracted (child process)` |
 | Installed Plugins open | `plugins open (to first paint)` |
 | Memory | `lua_heap=` / `rss=` on each line; check `rss` after browsing every Library page |
+
+### Connectivity and Exit
+
+| # | Step | Expected |
+| --- | --- | --- |
+| C1 | Settings → Connectivity | Airplane mode, Wi-Fi, Wi-Fi networks…, Join other network…, Saved networks, Network details, Send Book, More network settings (KOReader) |
+| C2 | Airplane mode on, then off | Wi-Fi goes off; after turning it off the Kindle rejoins a saved network by itself |
+| C3 | Wi-Fi networks… → a network → password | Joins; it then appears under Saved networks, and on the Kindle's own Wi-Fi list |
+| C4 | Join other network… (a hidden network) | Joins |
+| C5 | Saved networks → one → Forget | Gone from the list, and from the Kindle's own list |
+| C6 | Network details | Name, signal, security, channel, IP, mask, router, DNS, MAC, region |
+| E1 | Home → Exit to Kindle Home → Exit | KOReader closes; the Kindle's own home screen appears |
 
 ### Updates
 

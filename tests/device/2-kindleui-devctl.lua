@@ -12,6 +12,10 @@
 --   confirm         tap OK on the topmost confirm box
 --   top             log the topmost widget's name and text
 --   loaded <name>   log whether plugin <name> is loaded
+--   shot <file.png> save a screenshot of what is on screen
+--   home | connectivity  open that screen (for screenshots)
+--   airplane on|off|state  the Connectivity screen's airplane switch (cuts
+--                   Wi-Fi: only drive it from a script running on the Kindle)
 local UIManager = require("ui/uimanager")
 local logger = require("logger")
 
@@ -63,6 +67,24 @@ local function poll()
             local name, arg = line:match("^(%S+)%s*(.*)$")
             if name == "books" or name == "plugin" then
                 transfer(name, top)
+            elseif name == "shot" then
+                require("device").screen.bb:writePNG(arg)
+                say("shot " .. arg)
+            elseif name == "home" then
+                fm().kindleui:showHome()
+                say("home")
+            elseif name == "connectivity" then
+                local root = require("kindleui/ui/settings").build(fm().kindleui)
+                for __, e in ipairs(root) do
+                    if e.text == "Connectivity" then
+                        require("kindleui/ui/common").showTouchMenu(e.sub_item_table, nil, function() end)
+                    end
+                end
+                say("connectivity")
+            elseif name == "airplane" then
+                local W = require("kindleui/util/kindlewifi")
+                if arg == "on" or arg == "off" then W.setAirplaneMode(arg == "on") end
+                say("airplane " .. tostring(W.airplaneMode()))
             elseif name == "loaded" then
                 say("loaded " .. arg .. " " .. tostring(fm() and fm()[arg] ~= nil))
             elseif commands[name] then

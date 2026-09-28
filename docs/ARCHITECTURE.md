@@ -64,6 +64,8 @@ kindleui.koplugin/
     ├── config.lua            defaults + G_reader_settings["kindleui"]
     ├── ui/
     │   ├── common.lua        fonts, lines, Tappable, single-tab TouchMenu helper
+    │   ├── connectivity.lua  Settings → Connectivity: airplane mode, Wi-Fi, networks,
+    │   │                     join other, saved networks (connect/forget), details
     │   ├── bookmenu.lua      hold menu of a book (KOReader's status/reset/delete)
     │   ├── home.lua          Home (FocusManager: works with keys too)
     │   ├── library.lua       data loading + sort + options dialog + list view
@@ -82,6 +84,8 @@ kindleui.koplugin/
     │   └── qr.lua            URL + QRWidget
     └── util/
         ├── books.lua         adapter to KOReader library/open APIs, folder scan
+        ├── kindlewifi.lua    the Kindle's Wi-Fi through lipc (cmd wirelessEnable,
+        │                     wifid profileData/currentEssid/deleteProfile/"711")
         ├── librarycache.lua  metadata + thumbnail cache (one file + small .bbz files)
         ├── extractor.lua     cover/metadata extraction in a child process
         ├── sleepguard.lua    hold/restore AutoSuspend + Kindle screensaver timer
@@ -113,8 +117,12 @@ Home ─ Continue Reading ─→ FileManager:openFile ─→ reader
      ─ + Send Book ──────→ TransferScreen ─ Send Plugin / Send Book ─→ same screen, other kind
      ─ Installed Plugins ─→ list ─ tap ─→ that plugin's own menu (TouchMenu)
      ─ Settings ─────────→ Reading / Library / Device / Connectivity / Advanced / About
+                                                         ├ Connectivity → airplane mode, Wi-Fi, networks,
+                                                         │                saved networks, details
                                                          └ Advanced → Open KOReader Settings,
-                                                           Undo last plugin install
+                                                           Undo last plugin install, Exit
+     ─ Exit to Kindle Home → confirm → Event "Exit" (KOReader's own) → koreader.sh
+                             gives the screen back to the Kindle framework
 reader ─ top menu file-browser icon, Home key, "File browser" gesture ─→ FileManager → Home
 Home ─ Back key ─→ KOReader file browser (☰ → Kindle-style Home brings it back)
 ```

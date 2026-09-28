@@ -121,15 +121,28 @@ Last updated: 2026-09-25. Branch: `claude/kindle-plugin-handoff-wndhwa` of `zaki
   `tests/device/`. On the user's Paperwhite (FW 5.19.5, KOReader v2026.07.2):
   unit 937/937 pass; send (books + Send Plugin button + zip) passes; RONkindle
   (`duas`, 27.6 MB GitHub zip) installed via Send Plugin and loads.
+  After #22/#23: unit 985/985, smoke 67 steps, 0 failures.
   Never kill/relaunch KOReader there: it rebooted the Kindle twice; use
   KOReader's own restart (devctl patch).
 - **Plugin upload cap 20 → 60 MB** (user's choice): GitHub "Download ZIP"s
   with data beside the plugin (RONkindle: 27.6 MB) were refused.
 
-## Queued (user request, 2026-09-28)
-
-- Port the Kindle's own Wi-Fi & connectivity settings into the plugin.
-- An Exit button that leaves KOReader straight to the stock Kindle home.
+- **Wi-Fi & connectivity (ROADMAP #22, user request 2026-09-28):**
+  `util/kindlewifi.lua` (lipc: airplane mode via `com.lab126.cmd
+  wirelessEnable`, saved networks from `wifid profileData` without the psk,
+  `currentEssid`, `deleteProfile`, the `711` diagnostics text parsed) and
+  `ui/connectivity.lua` (Settings → Connectivity). Joining goes through
+  KOReader's NetworkMgr (saveNetwork/authenticateNetwork) and its
+  NetworkSetting list. Tested: `test_kindlewifi.lua` (46), smoke on the
+  Paperwhite (entries, details, saved list), airplane on/off live on the
+  device (radio down, then reconnected by itself in < 25 s).
+  Not tested by script: Join other, Forget (would change the owner's saved
+  networks), the network list's connect flow (KOReader's own widget).
+- **Exit to Kindle Home (ROADMAP #23):** last nav row on Home (it can push
+  "Recently added" off Home at large text: the fit rules drop it first), in
+  quick settings and Settings → Advanced; confirm → `Event "Exit"`.
+  Smoke checks the row, the confirm box and quick settings; the exit itself
+  needs a person watching the Kindle.
 
 ## Next
 
