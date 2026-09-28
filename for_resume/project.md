@@ -89,12 +89,13 @@ KOReader is a capable reader but its default interface is a file browser, which 
 ## Results
 
 - All 21 ranked roadmap items are marked done, each delivered as its own commit.
-- Measured in the KOReader emulator with 150 books: Home opens in 19–28 ms and repeat Library opens load data in 4 ms on a desktop core.
-- The complete phone-to-reader transfer runs end to end in the emulator with headless Chromium as the phone.
-- Status: MVP, tested in a KOReader emulator and not yet on Kindle hardware. The Kindle-only firewall and sleep-timer commands, real phone browsers and device timings still need a device.
+- Tested on a Kindle Paperwhite (firmware 5.19.5): 939 unit checks and a 59-step scripted walk through every screen pass on the device, run over SSH by a purpose-built tool that never touches the owner's books or settings.
+- Measured in three days of real use with a 163–496-book library: Home opens in 84 ms (median), a Library page turns in 62 ms, and memory stays at 27–35 MB when idle.
+- Phone-to-Kindle transfer over Wi-Fi runs at 3–5 MB/s: 9 PDFs (66 MB) arrived in 21 s in one session.
+- Device testing found a bug no emulator showed: phone file pickers greyed out plugin zips because of the page's file-type filter.
 
 ## What's next
 
-- Test on real Kindle hardware and record device timings using the built-in performance log lines.
+- Speed up the folder scan, which dominates Library opens on a real library (230–580 ms on the Kindle's FUSE storage).
 - Verify real phone browsers (iOS Safari, Android Chrome) over a real hotspot.
 - Check non-touch Kindles, where key navigation is implemented but untested.

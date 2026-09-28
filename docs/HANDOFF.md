@@ -154,5 +154,6 @@ ROADMAP: #1–21 are all marked ✅.
   - TitleBar needs `subtitle = " "` at creation for `setSubTitle` to work.
 - **Emulator tests that write to the plugins folder** (updater, plugin install)
   use `KO_PLUGINS_DIR`; the default mount holds only this plugin, read-only.
-- **Not verified on a real Kindle:** battery and Wi-Fi status, iptables, lipc, e-ink refresh, plugin installer, quick settings (light, Wi-Fi, sleep).
+- **Verified on a Kindle Paperwhite (FW 5.19.5):** iptables, lipc sleep hold, plugin installer, Send Book/Plugin over real Wi-Fi, every screen (smoke), timings (docs/PERFORMANCE.md). **Not yet:** tapping quick settings' light/Wi-Fi/sleep, e-ink refresh by eye, a phone picking a zip after the `accept` fix, a side-by-side with the stock home screen.
+- **Performance lead from real use:** the folder scan of a real `documents` (FUSE, Amazon files next to books) is 230–580 ms and dominates My Library opens; synthetic libraries hide it.
 - **Repo visibility:** the repo must be public for the updater to work without a token.

@@ -1,14 +1,15 @@
 # Testing
 
-Three layers:
+Four layers:
 
 1. **Automated tests** (LuaJIT, no KOReader): transfer layer, security, QR.
 2. **Emulator**: the plugin running inside a real KOReader build (v2026.07.1,
    Linux/SDL at Paperwhite 12 geometry), driven by scripts. It covers the UI,
    the end-to-end phone upload, timings and memory.
-3. **Device** (manual): what an emulator cannot show. That means the Kindle
-   firewall, the Kindle sleep timer, a real phone hotspot, e-ink refresh, and
-   real device timings.
+3. **On a Kindle, scripted** (`tools/kindle.sh`): layers 1 and 2 again on the
+   device, plus a real Wi-Fi transfer and a timing run.
+4. **On a Kindle, by hand**: what a script cannot judge, like e-ink refresh
+   and a real phone's browser.
 
 ## 1. Automated tests
 
@@ -172,6 +173,7 @@ tools/kindle.sh restart   # KOReader's own restart; waits until Home is back
 tools/kindle.sh unit      # tests/test_*.lua under the Kindle's own LuaJIT, LuaSocket, curl
 tools/kindle.sh smoke     # the emulator smoke patch, on the device (see below)
 tools/kindle.sh send      # real Wi-Fi transfer: this computer plays the phone
+tools/kindle.sh bench     # tests/bench/run.sh's timing run (150 books), on the device
 tools/kindle.sh all       # deploy + restart + unit + smoke + send
 tools/kindle.sh log 200   # tail of crash.log
 ```
@@ -196,6 +198,32 @@ tools/kindle.sh log 200   # tail of crash.log
   The default test books are removed from the library again afterwards.
   A real plugin: `SKIP_BOOKS=1 PLUGIN_ZIP=x.zip INSTALL=1 PLUGIN_NAME=name
   tools/kindle.sh send` also taps Install, restarts and checks that it loads.
+
+### Results on a Kindle Paperwhite (28 Sep 2026)
+
+Firmware 5.19.5, KOReader v2026.07.2, 1272×1696, reached over an iPhone
+hotspot.
+
+| Run | Result |
+| --- | --- |
+| `unit` | 939 checks passed, 0 failed (KOReader's QR encoder included) |
+| `smoke` (60 books, scratch profile) | 59 steps, 0 failures, no Lua errors |
+| `send` | EPUB + PDF received; Send Plugin button → plugin page without `accept`; zip received; install prompt shown |
+| `send` with RONkindle's GitHub zip, `INSTALL=1` | 27.6 MB in 7 s; installed as `duas.koplugin` (new); loaded after the restart |
+| `bench` ×2 (150 books) | see [PERFORMANCE.md](PERFORMANCE.md) |
+
+What the first device runs found (all fixed):
+- Plugin uploads from a phone never started (the page's `accept` filter).
+- The smoke patch assumed an emulator: the Kindle's own sleep timer fired
+  mid-run (only real touches reset it), "Prepare all covers" took longer
+  than a fixed wait, books copied in one go share a timestamp (so "the last
+  two" in date order were the wrong books), and a real device has
+  user-installed plugins.
+- Killing KOReader and relaunching it rebooted the Kindle twice; the tool now
+  only uses KOReader's own restart.
+- A redirected data folder needs KOReader's subfolders created first, or
+  KOReader stops at start (the sandbox patch creates them, and is one-shot so
+  such a failure can never repeat).
 
 ## 4. Manual test procedure (device)
 

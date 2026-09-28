@@ -13,6 +13,7 @@
 #   tools/kindle.sh log [lines]          tail of koreader/crash.log
 #   tools/kindle.sh unit                 tests/test_*.lua with KOReader's LuaJIT on the Kindle
 #   tools/kindle.sh smoke [books=60]     the emulator smoke patch, in a scratch profile
+#   tools/kindle.sh bench [books=150] [progress=50]  tests/bench/run.sh's timing run, on the device
 #   tools/kindle.sh send [files...]      real Wi-Fi transfer: this computer plays the phone
 #       env: SKIP_BOOKS=1; PLUGIN_ZIP=<zip> (default: a tiny test plugin);
 #            INSTALL=1 PLUGIN_NAME=<name> taps Install and checks it loads
@@ -171,6 +172,42 @@ LUA
     echo "SMOKE (device): OK"
 }
 
+cmd_bench() { # the emulator's tests/bench/run.sh sequence, on the device
+    need_host
+    need_devctl
+    n=${1:-150}; pr=${2:-50}
+    tmp=$(mktemp -d)
+    tests/make_library.sh "$tmp/books" "$n" "$pr" > /dev/null
+    { echo "if require(\"datastorage\"):getDataDir() ~= \"$WORK/home\" then return end"
+      cat tests/device/2-kindleui-bench.lua; } > "$tmp/2-kindleui-bench.lua"
+    mkdir -p "$tmp/home"
+    cat > "$tmp/home/settings.reader.lua" <<LUA
+return {
+    ["home_dir"] = "$WORK/books",
+    ["lastdir"] = "$WORK/books",
+    ["quickstart_shown_version"] = 999999999999,
+}
+LUA
+    k "rm -rf $WORK && mkdir -p $WORK"
+    push "$tmp/books" "$WORK"
+    push "$tmp/home" "$WORK"
+    push "$tmp/2-kindleui-bench.lua" "$KO/patches"
+    rm -rf "$tmp"
+    trap 'k "rm -f $KO/patches/2-kindleui-bench.lua /tmp/kindleui-sandbox" 2>/dev/null || true' EXIT
+    k "echo $WORK/home > /tmp/kindleui-sandbox"
+    off=$(log_size)
+    ko_restart
+    echo "bench running in a scratch profile ($n books, $pr with progress)..."
+    ok=0
+    wait_log "$off" "KINDLEUI BENCH DONE" 900 && ok=1
+    LOG=$(log_since "$off")
+    k "rm -f $KO/patches/2-kindleui-bench.lua /tmp/kindleui-sandbox"
+    ko_restart
+    k "rm -rf $WORK"
+    echo "$LOG" | grep -E "KINDLEUI BENCH|KindleUI perf:" | sed -E 's/^[0-9/]+-([0-9:]+) [A-Z]+ +(KindleUI perf: )?/ /'
+    [ $ok = 1 ] || { echo "BENCH (device): did not finish"; return 1; }
+}
+
 devctl_url() { # devctl_url <books|plugin>: open that screen, print its session URL
     off=$(log_size)
     ctl "$1"
@@ -279,6 +316,7 @@ restart) ko_restart; echo "KOReader restarted" ;;
 log) k "tail -n ${2:-80} $KO/crash.log" ;;
 unit) cmd_unit ;;
 smoke) shift; cmd_smoke "$@" ;;
+bench) shift; cmd_bench "$@" ;;
 send) shift; cmd_send "$@" ;;
 all) cmd_deploy; ko_restart; st=0; cmd_unit || st=1; cmd_smoke || st=1; cmd_send || st=1; exit $st ;;
 *) sed -n '2,20p' "$0"; exit 1 ;;

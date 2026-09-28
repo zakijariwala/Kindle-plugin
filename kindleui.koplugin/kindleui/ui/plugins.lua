@@ -413,7 +413,7 @@ end
 function Plugins:paintTo(bb, x, y)
     Menu.paintTo(self, bb, x, y)
     if self.t_open then
-        Perf.log("plugins open (to first paint)", self.t_open, { plugins = #self.item_table - 2 })
+        Perf.log("plugins open (to first paint)", self.t_open, { plugins = #self.item_table - 1 }) -- minus "Manage plugins"
         self.t_open = nil
     end
 end

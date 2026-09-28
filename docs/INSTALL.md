@@ -3,9 +3,9 @@
 This plugin runs inside **KOReader**. It does not replace the Kindle's own
 software; it adds a Kindle-style Home screen to KOReader.
 
-> **Status:** everything has been tested in a KOReader emulator, not yet on
-> a real Kindle. If something looks wrong, see [Troubleshooting](#troubleshooting)
-> for the log file to send.
+> **Status:** tested on a Kindle Paperwhite (firmware 5.19.5, KOReader
+> v2026.07.2) and in a KOReader emulator. If something looks wrong, see
+> [Troubleshooting](#troubleshooting) for the log file to send.
 
 ## What you need
 
@@ -33,8 +33,12 @@ and a `kindleui` folder.
 
 ## Step 2: Copy it to the Kindle
 
-1. Connect the Kindle to the computer with USB. It shows up as a drive named
-   **Kindle**. (If KOReader is open, it may ask to enter USB mode first.)
+1. Connect the Kindle to the computer with USB. Older Kindles show up as a
+   drive named **Kindle**. Recent ones (for example a Paperwhite on firmware
+   5.19) are an MTP device instead: on Windows it appears under *This PC* as
+   "Kindle Paperwhite …" → *Internal Storage*, without a drive letter; on a
+   Mac use Android File Transfer or OpenMTP. (If KOReader is open, it may ask
+   to enter USB mode first.)
 2. On that drive, open the **`koreader`** folder, then **`plugins`**. You
    will see KOReader's own plugins there (`statistics.koplugin`,
    `coverbrowser.koplugin`, …).
